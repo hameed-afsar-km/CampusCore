@@ -21,6 +21,7 @@ import {
   Menu as MenuIcon,
   X,
   Settings,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuth, UserRole } from "@/lib/auth-context";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { label: "Calendar", href: "/calendar", icon: <Calendar className="w-5 h-5" /> },
   { label: "Announcements", href: "/announcements", icon: <Bell className="w-5 h-5" /> },
   { label: "Events", href: "/events", icon: <Trophy className="w-5 h-5" /> },
+  { label: "Attendance", href: "/attendance", icon: <CheckCircle2 className="w-5 h-5" /> },
 ];
 
 export default function DashboardLayout({
