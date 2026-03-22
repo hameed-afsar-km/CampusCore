@@ -35,21 +35,21 @@ export function TextLoop({
   if (words.length === 0) return null;
 
   return (
-    <div className="relative inline-flex flex-col h-[1.25em] align-top overflow-hidden transition-all duration-300">
-      {/* Width-Gage: This invisible layer renders all words horizontally stacked with opacity-0
-          to force the parent container to ALWAYS maintain the width of the longest phrase. */}
-      <div className="flex flex-row invisible h-0 pointer-events-none select-none" aria-hidden="true">
+    <div className="relative inline-flex flex-col h-[1.3em] align-top overflow-hidden">
+      {/* Width-Gage: This invisible layer renders all words overlapping in a single CSS grid cell
+          to force the parent container to ALWAYS maintain exactly the width of the longest phrase. */}
+      <div className="grid invisible h-0 pointer-events-none select-none" aria-hidden="true">
         {words.map((word, i) => (
-          <div key={i} className={cn("px-1", className)}>{word}</div>
+          <div key={i} className={cn("col-start-1 row-start-1 px-1", className)}>{word}</div>
         ))}
       </div>
 
       <AnimatePresence mode="wait">
         <motion.div
            key={currentIndex}
-           initial={{ opacity: 0, scale: 0.95, filter: "blur(6px)", y: 5 }}
+           initial={{ opacity: 0, scale: 0.95, filter: "blur(4px)", y: 5 }}
            animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
-           exit={{ opacity: 0, scale: 1.05, filter: "blur(6px)", y: -5 }}
+           exit={{ opacity: 0, scale: 1.05, filter: "blur(4px)", y: -5 }}
            transition={{
              duration: 0.6,
              ease: [0.16, 1, 0.3, 1],

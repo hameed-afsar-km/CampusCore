@@ -107,9 +107,9 @@ export default function HeroSection() {
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 1, delay: 0.3, type: "spring", damping: 20 }}
-            className="hidden lg:flex relative w-full aspect-[4/3] items-center justify-center scale-90"
+            className="hidden lg:flex relative w-full aspect-[4/3] items-center justify-end scale-90 origin-right"
           >
-            <div className="relative w-full h-full max-w-lg">
+            <div className="relative w-full max-w-[420px] h-full">
               {/* Background Glows */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-purple-500/20 via-cyan-500/10 to-transparent blur-3xl animate-[pulse_6s_ease-in-out_infinite]" />
               

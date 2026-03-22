@@ -130,7 +130,7 @@ export default function LeavesPage() {
                         {leave.status}
                      </span>
                      <span className="text-sm font-medium text-gray-400 bg-white/[0.05] border border-white/[0.06] px-2 py-0.5 rounded-lg flex items-center gap-1.5">
-                       {leave.type === "Sick" ? <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> : <Briefcase className="w-3.5 h-3.5 text-blue-400" />} {leave.type}
+                       {leave.type === "Sick Leave" ? <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> : <Briefcase className="w-3.5 h-3.5 text-blue-400" />} {leave.type}
                      </span>
                      <span className="text-xs text-gray-500 ml-auto md:ml-0">
                        Applied {leave.dateApplied}
