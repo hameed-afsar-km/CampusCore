@@ -75,10 +75,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch user data from Firestore
   const fetchUserData = async (uid: string) => {
-    const docRef = doc(db, "users", uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      setUserData(docSnap.data() as UserData);
+    try {
+      const docRef = doc(db, "users", uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserData({
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt
+        } as UserData);
+      }
+    } catch (err: any) {
+      console.error("Firestore fetch error:", err);
+      // If offline, we might still have user object but no userData
+      // We don't throw here to avoid blocking the whole app if 
+      // the user is authenticated but Firestore is being flaky.
     }
   };
 
@@ -98,24 +109,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Email/Password Sign In
   const signInEmail = async (email: string, password: string) => {
-    // We only enforce formatting for new signs/logins just to be safe. But wait, admins don't use this currently?
-    // Actually the user said "Only those are allowed." so let's validate login too.
-    const userRoleDoc = await getDoc(doc(db, "userRoles", email)); 
-    // Wait, role is determined after login. Since we don't have role at login until we fetch user data,
-    // let's validate the regex pattern first.
-    validateEmailAndRole(email, "student"); // Check format only here (role check is ignored since student)
-    
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    const docRef = doc(db, "users", cred.user.uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-       const userRole = (docSnap.data() as UserData).role;
-       if (userRole === "professor" && !ALLOWED_STAFF_EMAILS.includes(email)) {
-          await signOut(auth);
-          throw new Error("This email is no longer authorized for Faculty access.");
-       }
+    try {
+      validateEmailAndRole(email, "student");
+      
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Attempt to check roles if online, but don't block login if offline
+      // since the Auth state is already local.
+      try {
+        const docRef = doc(db, "users", cred.user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const userRole = (docSnap.data() as UserData).role;
+          if (userRole === "professor" && !ALLOWED_STAFF_EMAILS.includes(email)) {
+            await signOut(auth);
+            throw new Error("This email is no longer authorized for Faculty access.");
+          }
+        }
+      } catch (dbErr) {
+        console.warn("DB check failed during sign-in, proceeding with auth state:", dbErr);
+      }
+      
+      await fetchUserData(cred.user.uid);
+    } catch (err: any) {
+      if (err.message?.includes("offline")) {
+        throw new Error("Connection failed. Please check your internet and Firebase configuration.");
+      }
+      throw err;
     }
-    await fetchUserData(cred.user.uid);
   };
 
   // Email/Password Sign Up
