@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Input } from './input';
 import { BackgroundPaths } from './background-paths';
+import { Typewriter } from './typewriter-text';
 
 interface AuthPageProps {
   type: 'login' | 'signup';
@@ -72,18 +73,34 @@ export function AuthPage({
 
           {/* Mobile Logo */}
           <div className="flex items-center gap-3 lg:hidden mb-8">
-            <p className="text-2xl font-bold tracking-tight text-white">CampusCore</p>
+            <p className="text-2xl font-bold tracking-tight text-white shimmer-text">CampusCore</p>
           </div>
 
           <div className="flex flex-col space-y-2 text-center sm:text-left mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-white leading-tight">
               {type === 'login' ? 'Welcome Back' : 'Create Account'}
             </h1>
-            <p className="text-gray-400 text-sm">
-              {type === 'login' 
-                ? 'Sign in to your campus dashboard' 
-                : 'Join your fellow students at Crescent'}
-            </p>
+            <div className="h-5">
+              <Typewriter 
+                text={
+                  type === 'login' 
+                    ? [
+                        "Sign in to your campus dashboard",
+                        "Manage your notes with ease",
+                        "Track your assignments and tests"
+                      ]
+                    : [
+                        "Begin your academic journey with CampusCore",
+                        "One platform. Every need.",
+                        "Built for Student Success."
+                      ]
+                }
+                speed={70}
+                deleteSpeed={40}
+                loop={true}
+                className="text-gray-400 text-sm"
+              />
+            </div>
           </div>
 
           {/* Error Message */}

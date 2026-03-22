@@ -26,6 +26,7 @@ import { useAuth, UserRole } from "@/lib/auth-context";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
 import { Dock, DockIcon, DockItem, DockLabel } from "@/components/ui/dock";
 import { MenuItem, MenuContainer } from "@/components/ui/fluid-menu";
+import { CalendarProvider } from "@/lib/calendar-context";
 
 interface NavItem {
   label: string;
@@ -63,6 +64,7 @@ export default function DashboardLayout({
 
   return (
     <ProtectedRoute>
+      <CalendarProvider>
       <div className="min-h-screen bg-[#030712] flex">
         {/* Mobile Sidebar Overlay */}
         <AnimatePresence>
@@ -192,6 +194,7 @@ export default function DashboardLayout({
           </MenuContainer>
         </div>
       </div>
+      </CalendarProvider>
     </ProtectedRoute>
   );
 }

@@ -2,76 +2,88 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "@/lib/auth-context";
+import { useCalendar } from "@/lib/calendar-context";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { format } from "date-fns";
 import {
   BookOpen,
   Calendar,
-  Clock,
-  MapPin,
   ListTodo,
   AlertTriangle,
   Plus,
   Search,
+  X,
+  Edit2,
+  Trash2,
+  GraduationCap,
 } from "lucide-react";
+
+type ExamType = "Unit Test" | "Mid Term" | "Final" | "Lab";
 
 interface Exam {
   id: string;
-  title: string;
+  type: ExamType;
   subject: string;
-  date: string;
-  time: string;
-  duration: string;
-  location: string;
-  type: "Mid Term" | "Final" | "Unit Test" | "Lab";
+  date: string; // yyyy-MM-dd
   topics: string[];
-  daysLeft: number;
+  createdByStudent?: boolean;
 }
+
+function getDaysLeft(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const examDate = new Date(dateStr + "T12:00:00");
+  examDate.setHours(0, 0, 0, 0);
+  return Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+const EXAM_TYPE_OPTIONS = [
+  { value: "Unit Test", label: "Unit Test" },
+  { value: "Mid Term", label: "Mid Term" },
+  { value: "Final", label: "Final" },
+  { value: "Lab", label: "Lab" },
+];
 
 const mockExams: Exam[] = [
   {
     id: "1",
-    title: "Second Mid-Term Examination",
+    type: "Mid Term",
     subject: "Compiler Design",
     date: "2026-03-25",
-    time: "10:00 AM",
-    duration: "2 Hours",
-    location: "Block A - 302",
-    type: "Mid Term",
     topics: ["Syntax Analysis", "Parsing Techniques", "Symbol Tables"],
-    daysLeft: 3,
   },
   {
     id: "2",
-    title: "Unit Test 4",
+    type: "Unit Test",
     subject: "Computer Networks",
     date: "2026-03-28",
-    time: "11:30 AM",
-    duration: "1 Hour",
-    location: "Seminar Hall 2",
-    type: "Unit Test",
     topics: ["Network Layer", "Routing Algorithms", "IP Addressing"],
-    daysLeft: 6,
   },
   {
     id: "3",
-    title: "Final Practical Examination",
+    type: "Lab",
     subject: "DBMS Lab",
     date: "2026-04-05",
-    time: "09:00 AM",
-    duration: "3 Hours",
-    location: "Database Lab",
-    type: "Lab",
-    topics: ["SQL Queries", "PL/SQL", "Normalization triggers"],
-    daysLeft: 14,
+    topics: ["SQL Queries", "PL/SQL", "Normalization"],
   },
 ];
 
+const defaultForm = {
+  type: "Unit Test" as ExamType,
+  subject: "",
+  date: "",
+  topicsStr: "",
+};
+
 export default function ExamsPage() {
   const [search, setSearch] = useState("");
-  const { userData } = useAuth();
-  const isProfessor = userData?.role === "professor";
+  const [exams, setExams] = useState<Exam[]>(mockExams);
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(defaultForm);
+  const { addEvent, removeEvent, updateEvent } = useCalendar();
 
-  const getExamColor = (type: string) => {
+  const getExamColor = (type: ExamType) => {
     switch (type) {
       case "Mid Term": return "text-purple-400 bg-purple-500/10 border-purple-500/30";
       case "Final": return "text-red-400 bg-red-500/10 border-red-500/30";
@@ -80,30 +92,99 @@ export default function ExamsPage() {
     }
   };
 
-  const filtered = mockExams.filter((e) =>
-    e.title.toLowerCase().includes(search.toLowerCase()) || 
-    e.subject.toLowerCase().includes(search.toLowerCase())
+  const filtered = exams.filter(
+    (e) =>
+      e.subject.toLowerCase().includes(search.toLowerCase()) ||
+      e.type.toLowerCase().includes(search.toLowerCase())
   );
+
+  const openCreateModal = () => {
+    setEditingId(null);
+    setForm(defaultForm);
+    setShowModal(true);
+  };
+
+  const openEditModal = (exam: Exam) => {
+    setEditingId(exam.id);
+    setForm({
+      type: exam.type,
+      subject: exam.subject,
+      date: exam.date,
+      topicsStr: exam.topics.join(", "),
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.subject.trim() || !form.date) return;
+    
+    const topics = form.topicsStr
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (editingId) {
+      setExams((prev) =>
+        prev.map((ex) =>
+          ex.id === editingId
+            ? { ...ex, type: form.type, subject: form.subject, date: form.date, topics }
+            : ex
+        )
+      );
+      // Update calendar
+      updateEvent(`exam-${editingId}`, {
+        title: `${form.type}: ${form.subject}`,
+        date: form.date,
+        type: "exam",
+      });
+    } else {
+      const id = Date.now().toString();
+      const newExam: Exam = {
+        id,
+        type: form.type,
+        subject: form.subject,
+        date: form.date,
+        topics,
+        createdByStudent: true,
+      };
+      setExams((prev) => [newExam, ...prev]);
+      // Add to calendar
+      addEvent({
+        id: `exam-${id}`,
+        title: `${form.type}: ${form.subject}`,
+        date: form.date,
+        type: "exam",
+      });
+    }
+    setShowModal(false);
+  };
+
+  const deleteExam = (id: string) => {
+    setExams((prev) => prev.filter((e) => e.id !== id));
+    removeEvent(`exam-${id}`);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Exams & Tests</h1>
-          <p className="text-gray-400 mt-1">Schedule, track preparation, and manage exams</p>
+          <p className="text-gray-400 mt-1">Schedule and track your exams — synced to calendar</p>
         </div>
-        {isProfessor && (
-          <button className="btn-primary flex items-center justify-center gap-2">
-            <Plus className="w-5 h-5" /> Schedule Exam
-          </button>
-        )}
+        <button
+          onClick={openCreateModal}
+          className="btn-primary flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" /> Add Exam / Test
+        </button>
       </div>
 
       <div className="relative w-full max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input
           type="text"
-          placeholder="Search by subject or title..."
+          placeholder="Search by subject or type..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl py-3 pl-10 pr-4 text-sm outline-none transition-all"
@@ -112,74 +193,201 @@ export default function ExamsPage() {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatePresence>
-          {filtered.map((exam, i) => (
-            <motion.div
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ delay: i * 0.05 }}
-              key={exam.id}
-              className="dash-card group relative p-6 hover:border-purple-500/30 transition-all flex flex-col"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border ${getExamColor(exam.type)}`}>
-                  {exam.type}
-                </span>
-                <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg ${
-                  exam.daysLeft <= 3 ? "text-red-400 bg-red-500/10 border border-red-500/20" : 
-                  exam.daysLeft <= 7 ? "text-amber-400 bg-amber-500/10 border border-amber-500/20" : 
-                  "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
-                }`}>
-                  <AlertTriangle className="w-3.5 h-3.5" /> {exam.daysLeft} Days Left
-                </span>
-              </div>
-
-              <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-300 mb-1">
-                {exam.title}
-              </h3>
-              <p className="text-gray-400 font-medium text-sm mb-6">{exam.subject}</p>
-
-              <div className="space-y-3 mt-auto">
-                <div className="flex items-center gap-2 text-sm text-gray-300 bg-black/20 p-2.5 rounded-lg border border-white/[0.04]">
-                  <Calendar className="w-4 h-4 text-purple-400" /> {exam.date}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-2 text-sm text-gray-300 bg-black/20 p-2.5 rounded-lg border border-white/[0.04]">
-                    <Clock className="w-4 h-4 text-cyan-400" /> {exam.time}
+          {filtered.map((exam, i) => {
+            const daysLeft = getDaysLeft(exam.date);
+            return (
+              <motion.div
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ delay: i * 0.05 }}
+                key={exam.id}
+                className="dash-card group relative p-6 hover:border-purple-500/30 transition-all flex flex-col"
+              >
+                {exam.createdByStudent && (
+                  <div className="absolute top-3 right-12 flex items-center gap-1 text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">
+                    <GraduationCap className="w-3 h-3" />
+                    Self
                   </div>
-                   <div className="flex items-center gap-2 text-sm text-gray-300 bg-black/20 p-2.5 rounded-lg border border-white/[0.04] truncate" title={exam.location}>
-                    <MapPin className="w-4 h-4 text-amber-400 flex-shrink-0" /> <span className="truncate">{exam.location}</span>
-                  </div>
-                </div>
-              </div>
+                )}
 
-              <div className="mt-6 pt-5 border-t border-white/[0.06]">
-                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <ListTodo className="w-4 h-4" /> Syllabus / Topics
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {exam.topics.map((topic, i) => (
-                    <span key={i} className="text-[11px] font-medium text-gray-300 bg-white/[0.05] border border-white/[0.1] px-2 py-1 rounded-md">
-                      {topic}
-                    </span>
-                  ))}
+                <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => openEditModal(exam)}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-purple-400 hover:bg-white/[0.1] transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteExam(exam.id)}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              </div>
-            </motion.div>
-          ))}
+
+                <div className="flex items-start justify-between mb-4">
+                  <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg border ${getExamColor(exam.type)}`}>
+                    {exam.type}
+                  </span>
+                  <span
+                    className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg ${
+                      daysLeft <= 0
+                        ? "text-gray-400 bg-gray-500/10 border border-gray-500/20"
+                        : daysLeft <= 3
+                        ? "text-red-400 bg-red-500/10 border border-red-500/20"
+                        : daysLeft <= 7
+                        ? "text-amber-400 bg-amber-500/10 border border-amber-500/20"
+                        : "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {daysLeft <= 0 ? "Past" : `${daysLeft}d Left`}
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-bold text-gray-100 mb-1">{exam.subject}</h3>
+
+                <div className="flex items-center gap-2 text-sm text-gray-300 bg-black/20 p-2.5 rounded-lg border border-white/[0.04] mt-2">
+                  <Calendar className="w-4 h-4 text-purple-400" />
+                  {format(new Date(exam.date + "T12:00:00"), "EEE, MMM d, yyyy")}
+                </div>
+
+                {exam.topics.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <ListTodo className="w-3.5 h-3.5" /> Topics
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {exam.topics.map((topic, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[11px] font-medium text-gray-300 bg-white/[0.05] border border-white/[0.1] px-2 py-0.5 rounded-md"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </div>
-      
+
       {filtered.length === 0 && (
-         <div className="text-center py-20 bg-white/[0.02] border border-white/[0.06] rounded-2xl border-dashed">
-           <div className="w-16 h-16 rounded-2xl bg-white/[0.04] flex items-center justify-center mx-auto mb-4 border border-white/[0.05]">
-             <BookOpen className="w-8 h-8 text-gray-500" />
-           </div>
-           <h3 className="text-lg font-medium text-gray-300 mb-1">No upcoming exams</h3>
-           <p className="text-sm text-gray-500">Relax! There are no tests scheduled matching your criteria.</p>
-         </div>
+        <div className="text-center py-20 bg-white/[0.02] border border-white/[0.06] rounded-2xl border-dashed">
+          <BookOpen className="w-10 h-10 text-gray-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-300 mb-1">No exams found</h3>
+          <p className="text-sm text-gray-500 mb-4">Add your exams to stay organized!</p>
+          <button onClick={openCreateModal} className="btn-primary inline-flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Exam
+          </button>
+        </div>
       )}
+
+      {/* Create / Edit Modal */}
+      <AnimatePresence>
+        {showModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+            onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-[#030712] border border-white/[0.1] rounded-2xl shadow-2xl p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-purple-400" />
+                  {editingId ? "Edit Exam" : "Add Exam / Test"}
+                </h2>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Type */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Type
+                  </label>
+                  <CustomSelect
+                    value={form.type}
+                    onChange={(v) => setForm({ ...form, type: v as ExamType })}
+                    options={EXAM_TYPE_OPTIONS}
+                  />
+                </div>
+
+                {/* Subject */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Subject *
+                  </label>
+                  <input
+                    required
+                    value={form.subject}
+                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                    placeholder="e.g. Compiler Design"
+                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
+                  />
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]"
+                  />
+                </div>
+
+                {/* Topics */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Topics (comma-separated)
+                  </label>
+                  <input
+                    value={form.topicsStr}
+                    onChange={(e) => setForm({ ...form, topicsStr: e.target.value })}
+                    placeholder="e.g. Syntax Analysis, Parsing, Symbol Tables"
+                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] hover:border-white/[0.15] transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="flex-1 btn-primary">
+                    {editingId ? "Save Changes" : "Add to Schedule"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

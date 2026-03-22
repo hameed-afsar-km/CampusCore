@@ -32,7 +32,7 @@ function FloatingPaths({ position }: { position: number }) {
                         d={path.d}
                         stroke="currentColor"
                         strokeWidth={path.width}
-                        strokeOpacity={0.05 + path.id * 0.02} // Adjusted opacity for dark mode
+                        strokeOpacity={0.05 + path.id * 0.02}
                         initial={{ pathLength: 0.3, opacity: 0.2 }}
                         animate={{
                             pathLength: 1,
@@ -56,8 +56,6 @@ export function BackgroundPaths({
 }: {
     title?: string;
 }) {
-    const words = title.split(" ");
-
     return (
         <div className="relative h-full w-full flex items-center justify-center overflow-hidden bg-[#02050e]">
             <div className="absolute inset-0">
@@ -72,46 +70,31 @@ export function BackgroundPaths({
                     transition={{ duration: 2 }}
                     className="max-w-4xl mx-auto"
                 >
-                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-4 tracking-tighter">
-                        {words.map((word, wordIndex) => (
-                            <span
-                                key={wordIndex}
-                                className="inline-block mr-4 last:mr-0"
-                            >
-                                {word.split("").map((letter, letterIndex) => (
-                                    <motion.span
-                                        key={`${wordIndex}-${letterIndex}`}
-                                        initial={{ y: 100, opacity: 0 }}
-                                        animate={{ y: 0, opacity: 1 }}
-                                        transition={{
-                                            delay:
-                                                wordIndex * 0.1 +
-                                                letterIndex * 0.03,
-                                            type: "spring",
-                                            stiffness: 150,
-                                            damping: 25,
-                                        }}
-                                        className="inline-block text-transparent bg-clip-text 
-                                        bg-gradient-to-r from-white via-neutral-300 to-neutral-500"
-                                    >
-                                        {letter}
-                                    </motion.span>
-                                ))}
-                            </span>
-                        ))}
-                    </h1>
-                    
-                    <motion.div 
+                    {/* Shimmer Title */}
+                    <div className="relative inline-block mb-6">
+                        <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tighter select-none">
+                            <span className="shimmer-text">CampusCore</span>
+                        </h1>
+                        {/* Glow beneath text */}
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-purple-400/60 to-transparent blur-sm" />
+                    </div>
+
+                    <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 1 }}
                         className="text-gray-400 mt-4 text-sm md:text-base max-w-sm mx-auto tracking-widest uppercase font-mono h-6"
                     >
-                        <Typewriter 
-                          text={["Empowering Your Academic Journey.", "Streamline Your Campus Life.", "Achieve More with CampusCore."]}
-                          speed={70}
-                          deleteSpeed={30}
-                          loop={true}
+                        <Typewriter
+                            text={[
+                                "Your Campus. Streamlined.",
+                                "Study Smart. Achieve More.",
+                                "One Platform. Every Need.",
+                                "Built for Student Success.",
+                            ]}
+                            speed={65}
+                            deleteSpeed={30}
+                            loop={true}
                         />
                     </motion.div>
                 </motion.div>
