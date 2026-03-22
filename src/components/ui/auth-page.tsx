@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Input } from './input';
+import { BackgroundPaths } from './background-paths';
 
 interface AuthPageProps {
   type: 'login' | 'signup';
@@ -45,40 +46,8 @@ export function AuthPage({
   return (
     <main className="relative md:h-screen md:overflow-hidden lg:grid lg:grid-cols-2 bg-[#02050e]">
       {/* Left Side: Visual Experience */}
-      <div className="bg-[#02050e] relative hidden h-full flex-col border-r border-white/[0.05] p-10 lg:flex overflow-hidden">
-        <div className="from-[#02050e] absolute inset-0 z-10 bg-gradient-to-t to-transparent opacity-80" />
-        
-        <div className="z-20 flex items-center gap-3 pt-4">
-          <p className="text-2xl font-bold tracking-tight text-white">
-            Campus<span className="gradient-text">Core</span>
-          </p>
-        </div>
-
-        <div className="z-20 mt-auto max-w-md">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <blockquote className="space-y-4">
-              <p className="text-2xl font-medium leading-relaxed text-white/90">
-                &ldquo;Streamlining my academic life has never been this beautiful. Everything I need is just one click away.&rdquo;
-              </p>
-              <footer className="flex items-center gap-3">
-                <div className="h-px w-8 bg-purple-500" />
-                <span className="font-mono text-sm font-semibold tracking-wider text-purple-400 uppercase">
-                  ~ Crescent Institute Student
-                </span>
-              </footer>
-            </blockquote>
-          </motion.div>
-        </div>
-
-        {/* Animated Background Paths */}
-        <div className="absolute inset-0 z-0">
-          <FloatingPaths position={1} />
-          <FloatingPaths position={-1} />
-        </div>
+      <div className="relative hidden h-full flex-col p-0 lg:flex overflow-hidden bg-[#02050e]">
+        <BackgroundPaths title="CampusCore" />
       </div>
 
       {/* Right Side: Form */}
@@ -97,20 +66,23 @@ export function AuthPage({
           </Link>
         </Button>
 
-        <div className="mx-auto w-full max-w-sm space-y-8">
+        <div className="mx-auto w-full max-w-md p-8 rounded-[2.5rem] glass-card relative overflow-hidden">
+          {/* Internal Glow */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 blur-3xl -z-10" />
+
           {/* Mobile Logo */}
-          <div className="flex items-center gap-3 lg:hidden mb-12">
+          <div className="flex items-center gap-3 lg:hidden mb-8">
             <p className="text-2xl font-bold tracking-tight text-white">CampusCore</p>
           </div>
 
-          <div className="flex flex-col space-y-2 text-center sm:text-left">
-            <h1 className="text-3xl font-bold tracking-tight text-white">
-              {type === 'login' ? 'Welcome Back' : 'Get Started'}
+          <div className="flex flex-col space-y-2 text-center sm:text-left mb-8">
+            <h1 className="text-3xl font-bold tracking-tight text-white leading-tight">
+              {type === 'login' ? 'Welcome Back' : 'Create Account'}
             </h1>
             <p className="text-gray-400 text-sm">
               {type === 'login' 
-                ? 'Sign in to access your student dashboard' 
-                : 'Join the next generation of academic management'}
+                ? 'Sign in to your campus dashboard' 
+                : 'Join your fellow students at Crescent'}
             </p>
           </div>
 
@@ -119,8 +91,9 @@ export function AuthPage({
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }} 
               animate={{ opacity: 1, scale: 1 }}
-              className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-sm text-red-400 text-center"
+              className="mb-8 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-sm text-red-400 text-center flex items-center justify-center gap-2"
             >
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               {error}
             </motion.div>
           )}
@@ -132,22 +105,24 @@ export function AuthPage({
               size="lg" 
               disabled={loading}
               onClick={onGoogleSignIn}
-              className="w-full bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.15] text-white rounded-2xl py-6"
+              className="w-full bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.15] text-white rounded-2xl py-6 h-auto transition-all duration-300"
             >
               <GoogleIcon className='size-5 me-2' />
               Continue with Google
             </Button>
           </div>
 
-          <AuthSeparator />
+          <div className="my-8">
+            <AuthSeparator />
+          </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-5">
             {type === 'signup' && setName && (
                <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest ml-1">Full Name</label>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">Full Name</label>
                 <Input
                   placeholder="John Doe"
-                  className="bg-white/[0.03] border-white/[0.08] focus:border-purple-500/50 rounded-2xl py-6 h-auto text-white"
+                  className="bg-white/[0.02] border-white/[0.06] focus:border-purple-500/50 rounded-2xl py-6 h-auto text-white transition-all"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -156,11 +131,11 @@ export function AuthPage({
             )}
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest ml-1">Institutional Email</label>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">Account ID (Email)</label>
               <div className="relative">
                 <Input
                   placeholder="123456789012@crescent.education"
-                  className="bg-white/[0.03] border-white/[0.08] focus:border-purple-500/50 rounded-2xl py-6 h-auto ps-11 text-white"
+                  className="bg-white/[0.02] border-white/[0.06] focus:border-purple-500/50 rounded-2xl py-6 h-auto ps-11 text-white transition-all"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -174,10 +149,10 @@ export function AuthPage({
 
             {setPassword && (
                <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest ml-1">Password</label>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">Security Key</label>
                 <Input
-                  placeholder="min. 6 characters"
-                  className="bg-white/[0.03] border-white/[0.08] focus:border-purple-500/50 rounded-2xl py-6 h-auto text-white"
+                  placeholder="••••••••"
+                  className="bg-white/[0.02] border-white/[0.06] focus:border-purple-500/50 rounded-2xl py-6 h-auto text-white transition-all"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value || "")}
@@ -187,33 +162,33 @@ export function AuthPage({
               </div>
             )}
 
-            <Button type="submit" disabled={loading} className="w-full btn-primary rounded-2xl py-6 h-auto text-base">
+            <Button type="submit" disabled={loading} className="w-full btn-primary rounded-2xl py-6 h-auto text-base mt-2">
               {loading ? (
                 <div className="flex items-center gap-2">
                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
-                    <Sparkles className="size-4" />
+                    <Sparkles className="size-4 text-cyan-300" />
                   </motion.div>
-                  Processing...
+                  Synchronizing...
                 </div>
               ) : (
-                <span>{type === 'login' ? 'Sign In' : 'Create Account'}</span>
+                <span className="flex items-center gap-2">
+                  {type === 'login' ? 'Sign In' : 'Create Account'}
+                  <Sparkles className="size-4 opacity-50" />
+                </span>
               )}
             </Button>
           </form>
 
-          <p className="text-gray-500 text-center text-sm">
+          <p className="text-gray-500 text-center text-sm mt-8">
             {type === 'login' ? (
-              <>New to CampusCore? <Link href="/signup" className="text-purple-400 hover:text-purple-300 font-semibold underline-offset-4 hover:underline">Sign up for free</Link></>
+              <>New to CampusCore? <Link href="/signup" className="text-purple-400 hover:text-purple-300 font-semibold underline-offset-4 hover:underline">Join Now</Link></>
             ) : (
               <>Already have an account? <Link href="/login" className="text-purple-400 hover:text-purple-300 font-semibold underline-offset-4 hover:underline">Sign in</Link></>
             )}
           </p>
 
-          <p className="text-gray-600 text-center text-xs leading-relaxed max-w-[280px] mx-auto">
-            By clicking continue, you agree to our{' '}
-            <a href="#" className="hover:text-gray-400 underline underline-offset-4">Terms</a>{' '}
-            and{' '}
-            <a href="#" className="hover:text-gray-400 underline underline-offset-4">Privacy Policy</a>.
+          <p className="text-[10px] text-gray-600 text-center mt-10 leading-relaxed max-w-[280px] mx-auto opacity-50 uppercase tracking-widest">
+            Protected by CampusCore Security
           </p>
         </div>
       </div>
@@ -221,52 +196,7 @@ export function AuthPage({
   );
 }
 
-function FloatingPaths({ position }: { position: number }) {
-  const paths = Array.from({ length: 36 }, (_, i) => ({
-    id: i,
-    d: `M-${380 - i * 5 * position} -${189 + i * 6}C-${
-      380 - i * 5 * position
-    } -${189 + i * 6} -${312 - i * 5 * position} ${216 - i * 6} ${
-      152 - i * 5 * position
-    } ${343 - i * 6}C${616 - i * 5 * position} ${470 - i * 6} ${
-      684 - i * 5 * position
-    } ${875 - i * 6} ${684 - i * 5 * position} ${875 - i * 6}`,
-    color: `rgba(99, 102, 241, ${0.05 + i * 0.01})`, // Using purple-ish colors
-    width: 0.5 + i * 0.02,
-  }));
 
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <svg
-        className="h-full w-full text-white/10"
-        viewBox="0 0 696 316"
-        fill="none"
-      >
-        <title>Background Paths</title>
-        {paths.map((path) => (
-          <motion.path
-            key={path.id}
-            d={path.d}
-            stroke="currentColor"
-            strokeWidth={path.width}
-            strokeOpacity={0.05 + path.id * 0.01}
-            initial={{ pathLength: 0.3, opacity: 0.1 }}
-            animate={{
-              pathLength: 1,
-              opacity: [0.1, 0.3, 0.1],
-              pathOffset: [0, 1, 0],
-            }}
-            transition={{
-              duration: 25 + Math.random() * 10,
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          />
-        ))}
-      </svg>
-    </div>
-  );
-}
 
 const GoogleIcon = (props: React.ComponentProps<'svg'>) => (
   <svg

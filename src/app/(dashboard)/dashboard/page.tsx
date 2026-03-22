@@ -12,26 +12,19 @@ import {
   ArrowRight,
   ClipboardList,
   Bell,
+  Trophy,
+  BarChart3,
 } from "lucide-react";
 
 export default function DashboardPage() {
   const { userData } = useAuth();
 
-  const isStudent = userData?.role === "student";
-
-  const stats = isStudent
-    ? [
-        { label: "Classes Today", value: "4", icon: BookOpen, color: "from-purple-500 to-indigo-500" },
-        { label: "Pending Tasks", value: "7", icon: CheckSquare, color: "from-amber-500 to-orange-500" },
-        { label: "Attendance", value: "82%", icon: Clock, color: "from-emerald-500 to-teal-500" },
-        { label: "Current CGPA", value: "8.4", icon: TrendingUp, color: "from-cyan-500 to-blue-500" },
-      ]
-    : [
-        { label: "Classes Today", value: "3", icon: BookOpen, color: "from-purple-500 to-indigo-500" },
-        { label: "Assignments Active", value: "5", icon: ClipboardList, color: "from-amber-500 to-orange-500" },
-        { label: "Leaves to Approve", value: "12", icon: Clock, color: "from-red-500 to-pink-500" },
-        { label: "Announcements", value: "2", icon: Bell, color: "from-cyan-500 to-blue-500" },
-      ];
+  const stats = [
+    { label: "Classes Today", value: "4", icon: BookOpen, color: "from-purple-500 to-indigo-500" },
+    { label: "Pending Tasks", value: "7", icon: CheckSquare, color: "from-amber-400 to-orange-500" },
+    { label: "Attendance", value: "82%", icon: Clock, color: "from-emerald-400 to-teal-500" },
+    { label: "Current CGPA", value: "8.4", icon: TrendingUp, color: "from-cyan-400 to-blue-500" },
+  ];
 
 //   Wait, I need to import Bell
   return (
@@ -61,8 +54,9 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
           className="text-right"
         >
-          <div className="text-sm text-gray-400 mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-          <div className="badge badge-primary uppercase">{userData?.role}</div>
+          <div className="text-sm font-medium text-gray-400 mb-1 backdrop-blur-md bg-white/[0.03] px-4 py-1.5 rounded-full border border-white/[0.05] shadow-inner">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </div>
         </motion.div>
       </div>
 
@@ -226,13 +220,13 @@ export default function DashboardPage() {
             
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Add Task", icon: CheckSquare, color: "text-emerald-400" },
-                { label: "Upload Notes", icon: ClipboardList, color: "text-purple-400" },
-                { label: "Apply Leave", icon: Calendar, color: "text-amber-400" },
-                { label: "Join Event", icon: BookOpen, color: "text-cyan-400" },
+                { label: "Add Task", icon: CheckSquare, color: "text-emerald-400", bg: "from-emerald-500/10 to-transparent" },
+                { label: "Upload Notes", icon: ClipboardList, color: "text-purple-400", bg: "from-purple-500/10 to-transparent" },
+                { label: "Join Event", icon: Trophy, color: "text-cyan-400", bg: "from-cyan-500/10 to-transparent" },
+                { label: "Check Marks", icon: BarChart3, color: "text-amber-400", bg: "from-amber-500/10 to-transparent" },
               ].map((action, i) => (
-                <button key={i} className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.1] transition-all">
-                  <action.icon className={`w-5 h-5 ${action.color}`} />
+                <button key={i} className={`flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br ${action.bg} border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg`}>
+                  <action.icon className={`w-6 h-6 ${action.color}`} />
                   <span className="text-xs text-center font-medium text-gray-300">{action.label}</span>
                 </button>
               ))}

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
 import { Squares } from "@/components/ui/Squares";
+import { TextLoop } from "@/components/ui/text-loop";
+import { ShinyButton } from "@/components/ui/shiny-button";
 
 export default function HeroSection() {
   return (
@@ -33,19 +34,6 @@ export default function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
           <div className="text-center lg:text-left">
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-8 border border-purple-500/20"
-            >
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <span className="text-sm text-purple-300 font-medium">
-                Built for Crescent Institute
-              </span>
-            </motion.div>
-
             {/* Heading */}
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
@@ -53,10 +41,20 @@ export default function HeroSection() {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-[1.1] tracking-tight mb-6"
             >
-              All your{" "}
-              <span className="gradient-text">college life,</span>
-              <br />
-              in one place.
+              Your Base for{" "}
+              <br className="hidden md:block"/>
+              <TextLoop className="gradient-text ml-0 md:ml-4" interval={2.5}>
+                {[
+                  "Academic Excellence",
+                  "Event Management",
+                  "Seamless Collaboration",
+                  "Performance Tracking"
+                ].map((text) => (
+                  <span key={text} className="block text-left">
+                    {text}
+                  </span>
+                ))}
+              </TextLoop>
             </motion.h1>
 
             {/* Subtext */}
@@ -67,8 +65,7 @@ export default function HeroSection() {
               className="text-lg md:text-xl text-gray-400 max-w-lg mx-auto lg:mx-0 leading-relaxed mb-10"
             >
               Manage assignments, notes, exams, attendance, and more — all
-              seamlessly organized in one platform designed for students &
-              professors.
+              seamlessly organized in one platform designed exclusively for students.
             </motion.p>
 
             {/* CTA Buttons */}
@@ -78,18 +75,12 @@ export default function HeroSection() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
             >
-              <Link
-                href="/signup"
-                className="btn-primary inline-flex items-center justify-center gap-2 text-base group"
-              >
-                Get Started
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link
-                href="/login"
-                className="btn-secondary inline-flex items-center justify-center gap-2 text-base"
-              >
-                Login
+              <Link href="/login" passHref>
+                <ShinyButton className="w-full sm:w-auto text-base">
+                  <span className="flex flex-row items-center justify-center gap-2 font-semibold">
+                    Get Started <span className="group-hover:translate-x-1 transition-transform">→</span>
+                  </span>
+                </ShinyButton>
               </Link>
             </motion.div>
 

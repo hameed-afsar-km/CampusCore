@@ -16,6 +16,7 @@ import {
 interface Todo {
   id: number;
   title: string;
+  description?: string;
   completed: boolean;
   priority: "high" | "medium" | "low";
   dueDate?: string;
@@ -30,7 +31,14 @@ const initialTodos: Todo[] = [
 
 export default function TodoPage() {
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
+  
+  // Expanded Form State
+  const [isExpanded, setIsExpanded] = useState(false);
   const [newTask, setNewTask] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("medium");
+  const [newDate, setNewDate] = useState("");
+
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
 
   const handleAdd = (e: React.FormEvent) => {
@@ -41,11 +49,18 @@ export default function TodoPage() {
       {
         id: Date.now(),
         title: newTask,
+        description: newDesc.trim() || undefined,
         completed: false,
-        priority: "medium",
+        priority: newPriority,
+        dueDate: newDate || undefined,
       },
     ]);
+    // Reset
     setNewTask("");
+    setNewDesc("");
+    setNewPriority("medium");
+    setNewDate("");
+    setIsExpanded(false);
   };
 
   const toggleTodo = (id: number) => {
@@ -85,26 +100,87 @@ export default function TodoPage() {
       </div>
 
       {/* Input Form */}
-      <form onSubmit={handleAdd} className="relative">
-        <div className="flex items-center gap-3 bg-[#030712] p-2 rounded-2xl border border-purple-500/30 focus-within:border-purple-500 shadow-lg shadow-purple-500/5 transition-all">
-          <div className="pl-3">
+      <form onSubmit={handleAdd} className="relative bg-[#030712] p-4 rounded-2xl border border-purple-500/30 shadow-lg shadow-purple-500/5 transition-all">
+        <div className="flex items-center gap-3">
+          <div className="pl-1">
             <Plus className="w-5 h-5 text-gray-500" />
           </div>
           <input
             type="text"
             value={newTask}
             onChange={(e) => setNewTask(e.target.value)}
+            onFocus={() => setIsExpanded(true)}
             placeholder="What needs to be done?"
-            className="flex-1 bg-transparent border-none outline-none text-gray-200 placeholder:text-gray-500 py-3"
+            className="flex-1 bg-transparent border-none outline-none text-gray-200 placeholder:text-gray-500 py-2 text-lg font-medium"
           />
-          <button
-            type="submit"
-            disabled={!newTask.trim()}
-            className="btn-primary !py-2.5 !px-5 mr-1"
-          >
-            Add
-          </button>
+          {!isExpanded && (
+            <button type="submit" disabled={!newTask.trim()} className="btn-primary !py-2 !px-5">
+              Add Quick Task
+            </button>
+          )}
         </div>
+
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-4 mt-2 border-t border-white/[0.06] space-y-4">
+                <div>
+                  <label className="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Description</label>
+                  <textarea
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Add more details about this task..."
+                    className="w-full bg-white/[0.02] border border-white/[0.06] rounded-xl p-3 text-sm text-gray-300 outline-none focus:border-purple-500/50 min-h-[80px]"
+                  />
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Priority</label>
+                    <div className="flex gap-2">
+                      {(["low", "medium", "high"] as const).map(p => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setNewPriority(p)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-colors ${
+                            newPriority === p ? getPriorityColor(p) : "bg-white/[0.02] border-white/[0.06] text-gray-500 hover:text-gray-300"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Deadline</label>
+                    <input
+                      type="date"
+                      value={newDate}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      className="w-full bg-white/[0.02] border border-white/[0.06] rounded-xl p-2.5 text-sm text-gray-300 outline-none focus:border-purple-500/50 [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setIsExpanded(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={!newTask.trim()} className="btn-primary !py-2 !px-6">
+                    Create Detailed Task
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </form>
 
       {/* Filters */}
@@ -164,12 +240,18 @@ export default function TodoPage() {
                   </span>
                   
                   {todo.dueDate && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
                       <Calendar className="w-3.5 h-3.5" />
-                      {todo.dueDate}
+                      {new Date(todo.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) !== 'Invalid Date' ? new Date(todo.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : todo.dueDate}
                     </div>
                   )}
                 </div>
+                
+                {todo.description && (
+                  <p className={`text-sm mt-3 border-l-2 border-white/[0.06] pl-3 py-1 ${todo.completed ? 'text-gray-600' : 'text-gray-400'}`}>
+                    {todo.description}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
