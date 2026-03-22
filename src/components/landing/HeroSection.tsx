@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { Squares } from "@/components/ui/Squares";
 
 export default function HeroSection() {
   return (
@@ -10,20 +11,23 @@ export default function HeroSection() {
       id="hero"
       className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20"
     >
-      {/* Background Effects */}
-      <div className="absolute inset-0">
-        <div className="orb orb-primary w-[500px] h-[500px] -top-40 -left-40 opacity-60" />
-        <div className="orb orb-accent w-[400px] h-[400px] top-1/4 right-0 opacity-40" />
-        <div className="orb orb-primary w-[300px] h-[300px] bottom-0 left-1/3 opacity-30" />
-        <div className="dot-pattern absolute inset-0 opacity-30" />
+      {/* Immersive Squares Background */}
+      <div className="absolute inset-0 z-0">
+        <Squares 
+          speed={0.3} 
+          squareSize={45} 
+          direction="diagonal" 
+          borderColor="rgba(108, 92, 231, 0.08)" 
+          hoverFillColor="rgba(0, 210, 255, 0.05)" 
+        />
       </div>
 
-      {/* Grid Lines */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/4 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-purple-500/10 to-transparent" />
-        <div className="absolute left-2/4 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-cyan-500/10 to-transparent" />
-        <div className="absolute left-3/4 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-purple-500/10 to-transparent" />
+      {/* Background Orbs */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="orb orb-primary w-[500px] h-[500px] -top-40 -left-40 opacity-40 blur-[130px]" />
+        <div className="orb orb-accent w-[400px] h-[400px] top-1/4 right-0 opacity-20 blur-[110px]" />
       </div>
+
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-16 md:py-24">
         <div className="grid lg:grid-cols-2 gap-12 items-center">

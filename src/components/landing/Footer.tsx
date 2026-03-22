@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { GraduationCap, Github, Linkedin, Mail, Heart } from "lucide-react";
+import { Github, Linkedin, Mail, Heart } from "lucide-react";
 
 const footerLinks = {
   Product: [
@@ -33,9 +33,6 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <Link href="/" className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6C5CE7] to-[#00D2FF] flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-white" />
-              </div>
               <span className="text-xl font-bold">
                 Campus<span className="gradient-text">Core</span>
               </span>

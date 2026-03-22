@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  GraduationCap,
   LayoutDashboard,
   ClipboardList,
   CheckSquare,
@@ -90,9 +89,6 @@ export default function DashboardLayout({
           {/* Logo */}
           <div className="h-20 flex items-center justify-between px-6 border-b border-white/[0.06]">
             <Link href="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6C5CE7] to-[#00D2FF] flex items-center justify-center">
-                <GraduationCap className="w-4 h-4 text-white" />
-              </div>
               <span className="text-xl font-bold tracking-tight">
                 Campus<span className="gradient-text">Core</span>
               </span>
@@ -161,9 +157,6 @@ export default function DashboardLayout({
           {/* Mobile Header */}
           <header className="lg:hidden h-16 flex items-center justify-between px-6 border-b border-white/[0.06] bg-[#030712]/95 backdrop-blur-xl sticky top-0 z-30">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-gradient-to-br from-[#6C5CE7] to-[#00D2FF] flex items-center justify-center">
-                <GraduationCap className="w-3 h-3 text-white" />
-              </div>
               <span className="font-bold">CampusCore</span>
             </Link>
             <button
