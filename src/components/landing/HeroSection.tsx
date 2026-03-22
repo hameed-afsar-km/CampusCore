@@ -39,21 +39,17 @@ export default function HeroSection() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-[1.1] tracking-tight mb-6"
+              className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.1] tracking-tight mb-6"
             >
               Your Base for{" "}
               <br className="hidden md:block"/>
-              <TextLoop className="gradient-text ml-0 md:ml-4" interval={2.5}>
+              <TextLoop className="gradient-text pt-4 md:pt-0" interval={2.5}>
                 {[
                   "Academic Excellence",
                   "Event Management",
                   "Seamless Collaboration",
                   "Performance Tracking"
-                ].map((text) => (
-                  <span key={text} className="block text-left">
-                    {text}
-                  </span>
-                ))}
+                ]}
               </TextLoop>
             </motion.h1>
 
@@ -106,51 +102,89 @@ export default function HeroSection() {
             </motion.div>
           </div>
 
-          {/* Right - Spline Placeholder */}
+          {/* Right - Dynamic Floating Glass Mockup */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="hidden lg:flex items-center justify-center"
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 1, delay: 0.3, type: "spring", damping: 20 }}
+            className="hidden lg:flex relative w-full aspect-[4/3] items-center justify-center scale-90"
           >
-            <div className="relative w-full max-w-lg aspect-square">
-              {/* Spline Container - Replace with actual Spline component */}
-              <div className="w-full h-full rounded-3xl glass border border-purple-500/20 flex items-center justify-center overflow-hidden">
-                {/* Decorative placeholder */}
-                <div className="relative w-full h-full flex items-center justify-center">
-                  {/* Animated circles */}
-                  <div className="absolute w-48 h-48 rounded-full border border-purple-500/20 animate-[spin_20s_linear_infinite]" />
-                  <div className="absolute w-64 h-64 rounded-full border border-cyan-500/10 animate-[spin_30s_linear_infinite_reverse]" />
-                  <div className="absolute w-80 h-80 rounded-full border border-purple-500/5 animate-[spin_40s_linear_infinite]" />
-
-                  {/* Center icon */}
-                  <div className="relative z-10 flex flex-col items-center gap-3">
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-cyan-400 flex items-center justify-center shadow-2xl shadow-purple-500/30 animate-float">
-                      <span className="text-3xl">🎓</span>
+            <div className="relative w-full h-full max-w-lg">
+              {/* Background Glows */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-purple-500/20 via-cyan-500/10 to-transparent blur-3xl animate-[pulse_6s_ease-in-out_infinite]" />
+              
+              {/* Main Center Dashboard Card */}
+              <motion.div 
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute z-20 w-[85%] left-[7.5%] top-[10%] rounded-2xl glass border border-white/10 bg-[#030712]/60 backdrop-blur-xl p-5 shadow-2xl shadow-purple-500/10"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                      GPA
                     </div>
-                    <p className="text-sm text-gray-500 font-mono">
-                      Spline 3D Goes Here
-                    </p>
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-200">Current Standing</h4>
+                      <p className="text-[10px] text-gray-500">Semester 4 • Computer Science</p>
+                    </div>
+                  </div>
+                  <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
+                    9.42
+                  </span>
+                </div>
+                {/* Mock Chart */}
+                <div className="h-16 w-full flex items-end gap-1.5 opacity-80 mt-6">
+                  {[40, 60, 45, 80, 55, 90, 75].map((h, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ height: 0 }}
+                      animate={{ height: `${h}%` }}
+                      transition={{ duration: 1, delay: 0.5 + i * 0.1 }}
+                      className="flex-1 bg-gradient-to-t from-purple-500/20 to-cyan-400/80 rounded-t-sm"
+                    />
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Top Right Floating Card (Events) */}
+              <motion.div
+                animate={{ y: [0, 8, 0] }}
+                transition={{ duration: 6, delay: 1, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute z-10 w-48 -right-4 top-[0%] rounded-2xl glass border border-white/10 bg-[#030712]/70 backdrop-blur-md p-4 shadow-xl shadow-cyan-500/5"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🏆</span>
+                  <h4 className="text-xs font-bold text-gray-300">Hackathon</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full w-[70%] bg-cyan-400 rounded-full" />
+                  </div>
+                  <p className="text-[9px] text-gray-500 text-right">Approaching</p>
+                </div>
+              </motion.div>
+
+              {/* Bottom Left Floating Card (Assignments) */}
+              <motion.div
+                animate={{ y: [0, -6, 0] }}
+                transition={{ duration: 4, delay: 0.5, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute z-30 w-56 -left-8 bottom-[15%] rounded-2xl glass border border-white/10 bg-[#030712]/80 backdrop-blur-xl p-4 shadow-2xl shadow-black/50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+                    <span className="text-emerald-400 text-sm">✓</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-200">OS Project</h4>
+                    <p className="text-[10px] text-emerald-400 mt-0.5">Submitted On Time</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              {/* Floating decorative elements */}
-              <div className="absolute -top-4 -right-4 w-20 h-20 rounded-2xl glass animate-float border border-purple-500/20 flex items-center justify-center">
-                <span className="text-2xl">📚</span>
-              </div>
-              <div
-                className="absolute -bottom-4 -left-4 w-16 h-16 rounded-2xl glass animate-float border border-cyan-500/20 flex items-center justify-center"
-                style={{ animationDelay: "1s" }}
-              >
-                <span className="text-xl">📊</span>
-              </div>
-              <div
-                className="absolute top-1/2 -right-6 w-14 h-14 rounded-xl glass animate-float border border-purple-500/20 flex items-center justify-center"
-                style={{ animationDelay: "2s" }}
-              >
-                <span className="text-lg">📅</span>
-              </div>
+              {/* Decorative Abstract Rings */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] aspect-square rounded-full border border-purple-500/10 animate-[spin_30s_linear_infinite]" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] aspect-square rounded-full border border-cyan-500/5 animate-[spin_40s_linear_infinite_reverse]" />
             </div>
           </motion.div>
         </div>

@@ -1,77 +1,57 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 type TextLoopProps = {
-  children: React.ReactNode[];
+  children: string[];
   className?: string;
   interval?: number;
 };
 
-// TextLoop component completely rewritten to have a beautiful "scroll within itself" / flip animation.
+// Cinematic Spring In-Place Reveal.
 export function TextLoop({
   children,
   className,
   interval = 3,
 }: TextLoopProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isAnimating, setIsAnimating] = useState<boolean>(false);
 
-  const words = React.Children.map(children, (child) => {
-    // Attempt to extract text if it's a simple string wrapped in a span, or just string.
-    if (typeof child === "string") return child;
-    // @ts-ignore
-    if (child?.props?.children && typeof child.props.children === "string") {
-      // @ts-ignore
-      return child.props.children;
-    }
-    return "";
-  }) || [];
-
-  const startAnimation = useCallback(() => {
-    const nextIndex = (currentIndex + 1) % words.length;
-    setCurrentIndex(nextIndex);
-    setIsAnimating(true);
-  }, [currentIndex, words.length]);
+  const words = useMemo(() => {
+    return React.Children.toArray(children)
+      .flatMap(child => (Array.isArray(child) ? child : [child]))
+      .map(child => (typeof child === "string" ? child : String(child)))
+      .filter(Boolean);
+  }, [children]);
 
   useEffect(() => {
-    if (!isAnimating) {
-      const timer = setTimeout(() => {
-        startAnimation();
-      }, interval * 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isAnimating, interval, startAnimation]);
+    if (words.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((c) => (c + 1) % words.length);
+    }, interval * 1000);
+    return () => clearInterval(timer);
+  }, [words.length, interval]);
 
-  const currentWordStr = words[currentIndex] || "";
-  const currentWordLetters = currentWordStr.split("");
+  if (words.length === 0) return null;
 
   return (
-    <div className={cn("relative inline-block transition-all duration-300", className)}>
-      <AnimatePresence
-        onExitComplete={() => setIsAnimating(false)}
-        mode="wait"
-      >
+    <div className="relative inline-flex flex-col h-[1.25em] overflow-hidden align-top min-w-[300px] sm:min-w-[400px] lg:min-w-[500px]">
+      <AnimatePresence mode="wait">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20, filter: "blur(4px)", position: "absolute" }}
-          transition={{ type: "spring", stiffness: 100, damping: 10 }}
-          className="z-10 inline-block relative text-left whitespace-nowrap overflow-visible"
-          key={currentWordStr}
+          key={currentIndex}
+          initial={{ opacity: 0, scale: 0.98, filter: "blur(8px)" }}
+          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+          exit={{ opacity: 0, scale: 1.02, filter: "blur(8px)" }}
+          transition={{
+            duration: 0.5,
+            ease: [0.32, 0.72, 0, 1],
+          }}
+          className={cn(
+            "whitespace-nowrap leading-[1.25em] text-center lg:text-left",
+            className
+          )}
         >
-          {currentWordLetters.map((letter, index) => (
-            <motion.span
-              key={currentWordStr + index}
-              initial={{ opacity: 0, y: 15, filter: "blur(8px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              transition={{ delay: index * 0.04, duration: 0.3 }}
-              className="inline-block"
-            >
-              {letter === " " ? "\u00A0" : letter}
-            </motion.span>
-          ))}
+          {words[currentIndex]}
         </motion.div>
       </AnimatePresence>
     </div>

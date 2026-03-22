@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { ShinyButton } from "@/components/ui/shiny-button";
 
 export default function CTASection() {
   return (
@@ -43,10 +44,14 @@ export default function CTASection() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 href="/signup"
-                className="btn-primary inline-flex items-center justify-center gap-2 text-base !py-3.5 !px-8 group"
+                className="group"
               >
-                Start Now
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <ShinyButton className="!py-3.5 !px-8 text-base">
+                  <span className="flex items-center gap-2">
+                    Start Now
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </span>
+                </ShinyButton>
               </Link>
               <Link
                 href="/login"

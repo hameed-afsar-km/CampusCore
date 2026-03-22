@@ -200,17 +200,40 @@ body::before {
 .feature-card {
   background: rgba(17, 24, 39, 0.5);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
   padding: 28px;
   transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: visible;
+}
+
+.feature-card::before {
+  content: "";
+  position: absolute;
+  inset: 0px;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 1;
+  transition: all 0.4s ease;
+  pointer-events: none;
 }
 
 .feature-card:hover {
   background: rgba(31, 41, 55, 0.6);
-  border-color: rgba(108, 92, 231, 0.3);
   transform: translateY(-4px);
   box-shadow: 0 12px 40px rgba(108, 92, 231, 0.15);
+}
+
+.feature-card:hover::before {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  inset: -1px;
+  padding: 2px;
+  opacity: 1;
 }
 
 .feature-card .icon-wrapper {
