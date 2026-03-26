@@ -2,6 +2,10 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { storage } from "@/lib/firebase";
+import { useFirestore } from "@/lib/use-firestore";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   FileText,
   Download,
@@ -19,6 +23,7 @@ import {
   Copy,
   Check,
   Eye,
+  Loader2,
 } from "lucide-react";
 
 interface Note {
@@ -28,16 +33,9 @@ interface Note {
   date: string;
   size: string;
   type: "pdf" | "doc" | "image";
-  file?: File;
-  objectUrl?: string; // blob URL for real uploaded files
+  url: string;
+  storagePath: string;
 }
-
-const mockNotes: Note[] = [
-  { id: "1", name: "Chapter 4 Notes - B Trees", subject: "DBMS", date: "Oct 12, 2026", size: "2.4 MB", type: "pdf" },
-  { id: "2", name: "Process Synchronization Handout", subject: "Operating Systems", date: "Oct 10, 2026", size: "1.1 MB", type: "pdf" },
-  { id: "3", name: "Board Snapshot - Dijkstra's", subject: "Algorithms", date: "Oct 09, 2026", size: "5.8 MB", type: "image" },
-  { id: "4", name: "Group Project Draft", subject: "Software Eng", date: "Oct 05, 2026", size: "840 KB", type: "doc" },
-];
 
 const ALL_ALLOWED_MIMES = [
   "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
@@ -59,20 +57,25 @@ function getFileType(file: File): "pdf" | "doc" | "image" {
 
 type TypeFilter = "all" | "pdf" | "doc" | "image";
 
+import { useAuth } from "@/lib/auth-context";
+
 export default function NotesPage() {
-  const [notes, setNotes] = useState<Note[]>(mockNotes);
+  const { user } = useAuth();
+  const { data: notes, add, remove, loading } = useFirestore<Note>("notes");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [subjectInput, setSubjectInput] = useState("");
   const [fileError, setFileError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Share link state
   const [shareNote, setShareNote] = useState<Note | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Note | null>(null);
 
   const filteredNotes = notes.filter((n) => {
     const matchSearch =
@@ -100,45 +103,33 @@ export default function NotesPage() {
     }
   };
 
-  const deleteNote = (id: string) => {
-    const note = notes.find((n) => n.id === id);
-    if (note?.objectUrl) URL.revokeObjectURL(note.objectUrl);
-    setNotes(notes.filter((n) => n.id !== id));
-  };
-
-  const openNote = (note: Note) => {
-    if (note.objectUrl) {
-      window.open(note.objectUrl, "_blank");
-    } else {
-      // For mock notes — show a placeholder action
-      alert(`Cannot preview "${note.name}" — this is a demo note without an actual file.`);
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      // Delete from Storage
+      const storageRef = ref(storage, confirmDelete.storagePath);
+      await deleteObject(storageRef);
+      // Delete from Firestore
+      await remove(confirmDelete.id);
+      setConfirmDelete(null);
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert("Failed to delete note. It might already be gone.");
     }
-  };
-
-  const downloadNote = (note: Note) => {
-    if (!note.objectUrl || !note.file) {
-      alert(`"${note.name}" is a demo note and cannot be downloaded.`);
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = note.objectUrl;
-    a.download = note.file.name;
-    a.click();
   };
 
   const generateShareLink = (note: Note): string => {
-    // In a real app, this would be an API call to generate a short link
-    return `https://campuscore.app/notes/share/${note.id}?view=1`;
+    // In a real app, this would point to a public page. For now, it's the direct Firebase link
+    return note.url;
   };
 
   const handleShareClick = (note: Note) => {
     setShareNote(note);
-    setCopied(false);
   };
 
   const handleCopyLink = () => {
     if (!shareNote) return;
-    navigator.clipboard.writeText(generateShareLink(shareNote)).then(() => {
+    navigator.clipboard.writeText(shareNote.url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -146,7 +137,7 @@ export default function NotesPage() {
 
   const validateFile = (file: File): boolean => {
     if (!ALL_ALLOWED_MIMES.includes(file.type)) {
-      setFileError("Only images (JPG, PNG, GIF, WebP), PDFs, and DOCX files are allowed.");
+      setFileError("Only images, PDFs, and DOCX files are allowed.");
       return false;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -165,33 +156,42 @@ export default function NotesPage() {
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
-  };
+    if (!selectedFile || !subjectInput.trim() || !user) return;
+    const storagePath = `notes/${user.uid}/${Date.now()}-${selectedFile.name}`;
+    const storageRef = ref(storage, storagePath);
+    const uploadTask = uploadBytesResumable(storageRef, selectedFile);
 
-  const handleUpload = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile || !subjectInput.trim()) return;
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      },
+      (error) => {
+        console.error("Upload failed:", error);
+        setFileError("Upload failed. please try again.");
+        setUploadProgress(null);
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        await add({
+          name: selectedFile.name.replace(/\.[^/.]+$/, ""),
+          subject: subjectInput.trim(),
+          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          size: formatBytes(selectedFile.size),
+          type: getFileType(selectedFile),
+          url: downloadURL,
+          storagePath: storagePath,
+        });
 
-    const objectUrl = URL.createObjectURL(selectedFile);
-    const newNote: Note = {
-      id: Date.now().toString(),
-      name: selectedFile.name.replace(/\.[^/.]+$/, ""),
-      subject: subjectInput.trim(),
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      size: formatBytes(selectedFile.size),
-      type: getFileType(selectedFile),
-      file: selectedFile,
-      objectUrl,
-    };
-    setNotes([newNote, ...notes]);
-    setShowUploadModal(false);
-    setSelectedFile(null);
-    setSubjectInput("");
-    setFileError("");
+        setShowUploadModal(false);
+        setSelectedFile(null);
+        setSubjectInput("");
+        setUploadProgress(null);
+      }
+    );
   };
 
   return (
@@ -199,7 +199,7 @@ export default function NotesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Notes Manager</h1>
-          <p className="text-gray-400 mt-1">Upload, open, share, and organize your study materials</p>
+          <p className="text-gray-400 mt-1">Real-time study materials stored in Firebase</p>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
@@ -209,7 +209,6 @@ export default function NotesPage() {
         </button>
       </div>
 
-      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-center gap-3 justify-between">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -222,7 +221,6 @@ export default function NotesPage() {
           />
         </div>
 
-        {/* Type filter tabs */}
         <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl border border-white/[0.06]">
           {(["all", "pdf", "doc", "image"] as TypeFilter[]).map((t) => (
             <button
@@ -240,7 +238,6 @@ export default function NotesPage() {
         </div>
       </div>
 
-      {/* Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         <AnimatePresence>
           {filteredNotes.map((note) => (
@@ -252,24 +249,21 @@ export default function NotesPage() {
               key={note.id}
               className="dash-card group relative p-5 hover:border-purple-500/30 transition-all"
             >
-              {/* File Preview Area */}
-              <button
-                onClick={() => openNote(note)}
+              <a
+                href={note.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center justify-center w-full h-28 bg-white/[0.02] border border-white/[0.04] rounded-xl mb-4 hover:bg-white/[0.06] transition-colors relative overflow-hidden"
-                title="Open file"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                 {getFileIcon(note.type)}
-                {/* Open hint on hover */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl">
                   <Eye className="w-6 h-6 text-white" />
                 </div>
-              </button>
+              </a>
 
               <div className="flex items-start justify-between gap-2 mb-1">
-                <h3 className="font-semibold text-gray-200 line-clamp-1 flex-1 text-sm" title={note.name}>
-                  {note.name}
-                </h3>
+                <h3 className="font-semibold text-gray-200 line-clamp-1 flex-1 text-sm">{note.name}</h3>
                 <span className={`flex-shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${getTypeBadgeColor(note.type)}`}>
                   {note.type}
                 </span>
@@ -280,30 +274,20 @@ export default function NotesPage() {
                 <div className="text-xs text-gray-500">{note.size} · {note.date}</div>
                 <div className="flex items-center gap-0.5">
                   <button
-                    onClick={() => openNote(note)}
+                    onClick={() => window.open(note.url, "_blank")}
                     className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
-                    title="Open"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => downloadNote(note)}
-                    className="p-1.5 text-gray-400 hover:text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors"
-                    title="Download"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                  <button
                     onClick={() => handleShareClick(note)}
                     className="p-1.5 text-gray-400 hover:text-purple-400 hover:bg-purple-400/10 rounded-lg transition-colors"
-                    title="Share link (view/download)"
                   >
                     <Share2 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => deleteNote(note.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                    title="Delete"
+                    onClick={() => setConfirmDelete(note)}
+                    className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -314,18 +298,11 @@ export default function NotesPage() {
         </AnimatePresence>
       </div>
 
-      {filteredNotes.length === 0 && (
+      {!loading && filteredNotes.length === 0 && (
         <div className="text-center py-24 bg-white/[0.02] border border-white/[0.06] rounded-2xl border-dashed">
           <FolderOpen className="w-10 h-10 text-gray-600 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-300 mb-1">
-            {search || typeFilter !== "all" ? "No notes match your filters" : "No notes yet"}
-          </h3>
-          <p className="text-sm text-gray-500 mb-6">Upload PDFs, documents, or images.</p>
-          {!search && typeFilter === "all" && (
-            <button onClick={() => setShowUploadModal(true)} className="btn-primary inline-flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Upload Your First Note
-            </button>
-          )}
+          <h3 className="text-lg font-medium text-gray-300 mb-1">No notes match your filters</h3>
+          <p className="text-sm text-gray-500 mb-6">Upload PDFs, documents, or images to get started.</p>
         </div>
       )}
 
@@ -362,20 +339,12 @@ export default function NotesPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-gray-500 mb-3">
-                Anyone with this link can <strong className="text-gray-300">view or download</strong> the file. They cannot edit it.
-              </p>
-
               <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-                <p className="flex-1 text-xs font-mono text-purple-300 truncate">
-                  {generateShareLink(shareNote)}
-                </p>
+                <p className="flex-1 text-xs font-mono text-purple-300 truncate">{generateShareLink(shareNote)}</p>
                 <button
                   onClick={handleCopyLink}
                   className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
-                    copied
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-white/[0.08] text-gray-300 hover:text-white"
+                    copied ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-white/[0.08] text-gray-300 hover:text-white"
                   }`}
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -395,7 +364,7 @@ export default function NotesPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-            onClick={(e) => e.target === e.currentTarget && setShowUploadModal(false)}
+            onClick={(e) => !uploadProgress && e.target === e.currentTarget && setShowUploadModal(false)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -408,90 +377,62 @@ export default function NotesPage() {
                   <Upload className="w-5 h-5 text-purple-400" />
                   Upload Note
                 </h2>
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                {!uploadProgress && (
+                  <button onClick={() => setShowUploadModal(false)} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
 
               <form onSubmit={handleUpload} className="space-y-4">
-                {/* Drag & Drop Zone */}
                 <div
                   onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                   onDragLeave={() => setIsDragOver(false)}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-                    isDragOver
-                      ? "border-purple-500/60 bg-purple-500/10"
-                      : selectedFile
-                      ? "border-emerald-500/40 bg-emerald-500/5"
-                      : "border-white/[0.1] hover:border-purple-500/40 hover:bg-white/[0.02]"
-                  }`}
+                  onDrop={(e) => { e.preventDefault(); setIsDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
+                  onClick={() => !uploadProgress && fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                    isDragOver ? "border-purple-500 bg-purple-500/10" : selectedFile ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/[0.1] hover:border-purple-500/40 hover:bg-white/[0.02]"
+                  } ${uploadProgress ? "cursor-wait opacity-50" : "cursor-pointer"}`}
                 >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
-                  />
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} disabled={!!uploadProgress} />
                   {selectedFile ? (
                     <div>
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
-                        {getFileIcon(getFileType(selectedFile))}
-                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">{getFileIcon(getFileType(selectedFile))}</div>
                       <p className="text-sm font-medium text-emerald-400 truncate">{selectedFile.name}</p>
                       <p className="text-xs text-gray-500 mt-1">{formatBytes(selectedFile.size)}</p>
                     </div>
                   ) : (
                     <div>
-                      <div className="w-12 h-12 rounded-xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
-                        <Upload className="w-6 h-6 text-gray-400" />
-                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3"><Upload className="w-6 h-6 text-gray-400" /></div>
                       <p className="text-sm text-gray-300 font-medium">Drag & drop or click to browse</p>
-                      <p className="text-xs text-gray-500 mt-2">PDF, DOCX, or Images (max 20MB)</p>
+                      <p className="text-xs text-gray-500 mt-2">Max 20MB</p>
+                    </div>
+                  )}
+
+                  {uploadProgress !== null && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                        <span>Uploading...</span>
+                        <span>{uploadProgress.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${uploadProgress}%` }} className="h-full bg-purple-500" />
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {fileError && (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    {fileError}
-                  </div>
-                )}
+                {fileError && <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400"><AlertCircle className="w-4 h-4 flex-shrink-0" />{fileError}</div>}
 
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
-                    Subject *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={subjectInput}
-                    onChange={(e) => setSubjectInput(e.target.value)}
-                    placeholder="e.g. Database Management Systems"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Subject *</label>
+                  <input type="text" required value={subjectInput} onChange={(e) => setSubjectInput(e.target.value)} placeholder="e.g. DBMS" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" disabled={!!uploadProgress} />
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowUploadModal(false)}
-                    className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] hover:border-white/[0.15] transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!selectedFile || !subjectInput.trim() || !!fileError}
-                    className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Upload File
+                  <button type="button" onClick={() => setShowUploadModal(false)} className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] transition-all" disabled={!!uploadProgress}>Cancel</button>
+                  <button type="submit" disabled={!selectedFile || !subjectInput.trim() || !!fileError || !!uploadProgress} className="flex-1 btn-primary disabled:opacity-50">
+                    {uploadProgress ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Upload File"}
                   </button>
                 </div>
               </form>
@@ -499,6 +440,14 @@ export default function NotesPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleDelete}
+        title="Delete Note?"
+        message="This will permanently delete the file and its associated data. This action cannot be undone."
+      />
     </div>
   );
 }

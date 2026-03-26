@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useCalendar } from "@/lib/calendar-context";
+import { useFirestore } from "@/lib/use-firestore";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { format } from "date-fns";
 import {
@@ -26,10 +27,10 @@ interface Exam {
   subject: string;
   date: string; // yyyy-MM-dd
   topics: string[];
-  createdByStudent?: boolean;
 }
 
 function getDaysLeft(dateStr: string): number {
+  if (!dateStr) return 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const examDate = new Date(dateStr + "T12:00:00");
@@ -44,30 +45,6 @@ const EXAM_TYPE_OPTIONS = [
   { value: "Lab", label: "Lab" },
 ];
 
-const mockExams: Exam[] = [
-  {
-    id: "1",
-    type: "Mid Term",
-    subject: "Compiler Design",
-    date: "2026-03-25",
-    topics: ["Syntax Analysis", "Parsing Techniques", "Symbol Tables"],
-  },
-  {
-    id: "2",
-    type: "Unit Test",
-    subject: "Computer Networks",
-    date: "2026-03-28",
-    topics: ["Network Layer", "Routing Algorithms", "IP Addressing"],
-  },
-  {
-    id: "3",
-    type: "Lab",
-    subject: "DBMS Lab",
-    date: "2026-04-05",
-    topics: ["SQL Queries", "PL/SQL", "Normalization"],
-  },
-];
-
 const defaultForm = {
   type: "Unit Test" as ExamType,
   subject: "",
@@ -76,12 +53,12 @@ const defaultForm = {
 };
 
 export default function ExamsPage() {
+  const { data: exams, add, update, remove, loading } = useFirestore<Exam>("exams");
   const [search, setSearch] = useState("");
-  const [exams, setExams] = useState<Exam[]>(mockExams);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(defaultForm);
-  const { addEvent, removeEvent, updateEvent } = useCalendar();
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const getExamColor = (type: ExamType) => {
     switch (type) {
@@ -115,7 +92,7 @@ export default function ExamsPage() {
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.subject.trim() || !form.date) return;
     
@@ -125,44 +102,21 @@ export default function ExamsPage() {
       .filter(Boolean);
 
     if (editingId) {
-      setExams((prev) =>
-        prev.map((ex) =>
-          ex.id === editingId
-            ? { ...ex, type: form.type, subject: form.subject, date: form.date, topics }
-            : ex
-        )
-      );
-      // Update calendar
-      updateEvent(`exam-${editingId}`, {
-        title: `${form.type}: ${form.subject}`,
-        date: form.date,
-        type: "exam",
-      });
-    } else {
-      const id = Date.now().toString();
-      const newExam: Exam = {
-        id,
+      await update(editingId, {
         type: form.type,
         subject: form.subject,
         date: form.date,
-        topics,
-        createdByStudent: true,
-      };
-      setExams((prev) => [newExam, ...prev]);
-      // Add to calendar
-      addEvent({
-        id: `exam-${id}`,
-        title: `${form.type}: ${form.subject}`,
+        topics
+      });
+    } else {
+      await add({
+        type: form.type,
+        subject: form.subject,
         date: form.date,
-        type: "exam",
+        topics
       });
     }
     setShowModal(false);
-  };
-
-  const deleteExam = (id: string) => {
-    setExams((prev) => prev.filter((e) => e.id !== id));
-    removeEvent(`exam-${id}`);
   };
 
   return (
@@ -201,30 +155,12 @@ export default function ExamsPage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: i * 0.05 }}
                 key={exam.id}
                 className="dash-card group relative p-6 hover:border-purple-500/30 transition-all flex flex-col"
               >
-                {exam.createdByStudent && (
-                  <div className="absolute top-3 right-12 flex items-center gap-1 text-[10px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">
-                    <GraduationCap className="w-3 h-3" />
-                    Self
-                  </div>
-                )}
-
                 <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEditModal(exam)}
-                    className="p-1.5 rounded-lg text-gray-500 hover:text-purple-400 hover:bg-white/[0.1] transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => deleteExam(exam.id)}
-                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <button onClick={() => openEditModal(exam)} className="p-1.5 rounded-lg text-gray-500 hover:text-purple-400 hover:bg-white/[0.1] transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => setConfirmDelete(exam.id)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
 
                 <div className="flex items-start justify-between mb-4">
@@ -251,7 +187,7 @@ export default function ExamsPage() {
 
                 <div className="flex items-center gap-2 text-sm text-gray-300 bg-black/20 p-2.5 rounded-lg border border-white/[0.04] mt-2">
                   <Calendar className="w-4 h-4 text-purple-400" />
-                  {format(new Date(exam.date + "T12:00:00"), "EEE, MMM d, yyyy")}
+                  {exam.date ? format(new Date(exam.date + "T12:00:00"), "EEE, MMM d, yyyy") : "Invalid Date"}
                 </div>
 
                 {exam.topics.length > 0 && (
@@ -261,12 +197,7 @@ export default function ExamsPage() {
                     </h4>
                     <div className="flex flex-wrap gap-1.5">
                       {exam.topics.map((topic, idx) => (
-                        <span
-                          key={idx}
-                          className="text-[11px] font-medium text-gray-300 bg-white/[0.05] border border-white/[0.1] px-2 py-0.5 rounded-md"
-                        >
-                          {topic}
-                        </span>
+                        <span key={idx} className="text-[11px] font-medium text-gray-300 bg-white/[0.05] border border-white/[0.1] px-2 py-0.5 rounded-md">{topic}</span>
                       ))}
                     </div>
                   </div>
@@ -277,7 +208,7 @@ export default function ExamsPage() {
         </AnimatePresence>
       </div>
 
-      {filtered.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="text-center py-20 bg-white/[0.02] border border-white/[0.06] rounded-2xl border-dashed">
           <BookOpen className="w-10 h-10 text-gray-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-300 mb-1">No exams found</h3>
@@ -305,89 +236,45 @@ export default function ExamsPage() {
               className="w-full max-w-md bg-[#030712] border border-white/[0.1] rounded-2xl shadow-2xl p-6"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-purple-400" />
-                  {editingId ? "Edit Exam" : "Add Exam / Test"}
-                </h2>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2"><BookOpen className="w-5 h-5 text-purple-400" />{editingId ? "Edit Exam" : "Add Exam / Test"}</h2>
+                <button onClick={() => setShowModal(false)} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors"><X className="w-5 h-5" /></button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Type */}
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
-                    Type
-                  </label>
-                  <CustomSelect
-                    value={form.type}
-                    onChange={(v) => setForm({ ...form, type: v as ExamType })}
-                    options={EXAM_TYPE_OPTIONS}
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Type</label>
+                  <CustomSelect value={form.type} onChange={(v) => setForm({ ...form, type: v as ExamType })} options={EXAM_TYPE_OPTIONS} />
                 </div>
-
-                {/* Subject */}
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
-                    Subject *
-                  </label>
-                  <input
-                    required
-                    value={form.subject}
-                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                    placeholder="e.g. Compiler Design"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Subject *</label>
+                  <input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="e.g. Compiler Design" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                 </div>
-
-                {/* Date */}
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
-                    Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={form.date}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Date *</label>
+                  <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]" />
                 </div>
-
-                {/* Topics */}
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
-                    Topics (comma-separated)
-                  </label>
-                  <input
-                    value={form.topicsStr}
-                    onChange={(e) => setForm({ ...form, topicsStr: e.target.value })}
-                    placeholder="e.g. Syntax Analysis, Parsing, Symbol Tables"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Topics (comma-separated)</label>
+                  <input value={form.topicsStr} onChange={(e) => setForm({ ...form, topicsStr: e.target.value })} placeholder="e.g. Parsing, Syntax Analysis" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                 </div>
-
                 <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] hover:border-white/[0.15] transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="flex-1 btn-primary">
-                    {editingId ? "Save Changes" : "Add to Schedule"}
-                  </button>
+                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] hover:border-white/[0.15] transition-all">Cancel</button>
+                  <button type="submit" className="flex-1 btn-primary">{editingId ? "Save Changes" : "Add to Schedule"}</button>
                 </div>
               </form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete && remove(confirmDelete)}
+        title="Delete Exam?"
+        message="This action cannot be undone. This exam will be removed from your schedule and calendar."
+      />
     </div>
   );
 }
+

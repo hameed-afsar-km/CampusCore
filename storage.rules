@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Match all files in the 'notes/' folder
+    match /notes/{userId}/{fileName} {
+      // Allow the owner to read and write
+      allow read, write: if request.auth.uid == userId;
+      // Allow others to read if they have the direct link (token) - this is how Firebase Storage URLs work
+      // but if we want to restrict, we'd do it here.
+    }
+
+    // Match event proofs
+    match /event_proofs/{fileName} {
+       allow read, write: if isAuthenticated();
+    }
+
+    // Fallback for everything else
+    match /{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

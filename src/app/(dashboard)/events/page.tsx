@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useFirestore } from "@/lib/use-firestore";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { format } from "date-fns";
 import {
   Trophy,
   Plus,
@@ -27,6 +32,8 @@ import {
   Filter,
   Info,
   Trash2,
+  Edit2,
+  Loader2,
 } from "lucide-react";
 import { CustomSelect } from "@/components/ui/custom-select";
 
@@ -46,6 +53,7 @@ interface AcadEvent {
   source: EventSource;
   status: EventStatus;
   proofUrl?: string;
+  proofName?: string;
 }
 
 const CATEGORY_ICONS: Record<EventCategory, React.ReactNode> = {
@@ -60,67 +68,8 @@ const CATEGORY_ICONS: Record<EventCategory, React.ReactNode> = {
   Other: <Palette className="w-4 h-4" />,
 };
 
-const CAMPUS_CATEGORIES: EventCategory[] = ["Technical", "Cultural", "Sports", "Workshop"];
-const USER_CATEGORIES: EventCategory[] = ["Hackathon", "Media", "Dance", "Programming", "Cultural", "Sports", "Other"];
-
-const mockEvents: AcadEvent[] = [
-  {
-    id: "1",
-    title: "HackCampus 2026",
-    description: "Annual 24-hour hackathon. Build innovative solutions for real-world problems.",
-    category: "Technical",
-    date: "Mar 28-29, 2026",
-    location: "Main Auditorium",
-    organizer: "CS Department",
-    link: "https://hackcampus2026.com",
-    source: "campus",
-    status: "registered",
-  },
-  {
-    id: "2",
-    title: "AI & ML Workshop Series",
-    description: "A 3-day rigorous workshop on deep learning and neural networks using PyTorch.",
-    category: "Workshop",
-    date: "Apr 05-07, 2026",
-    location: "Lab 3, CS Block",
-    organizer: "AI Club",
-    source: "campus",
-    status: "upcoming",
-  },
-  {
-    id: "3",
-    title: "Inter-College Debate",
-    description: "Topic: The Ethical Implications of AGI. Open to all departments.",
-    category: "Cultural",
-    date: "Apr 12, 2026",
-    location: "Seminar Hall 1",
-    organizer: "Literary Society",
-    source: "campus",
-    status: "upcoming",
-  },
-  {
-    id: "4",
-    title: "National Hackathon 2026",
-    description: "Registered and submitted our project on AI-driven smart campus solutions.",
-    category: "Hackathon",
-    date: "Mar 10, 2026",
-    location: "Online",
-    organizer: "GeeksForGeeks",
-    source: "user",
-    status: "won",
-    proofUrl: "certificate.pdf",
-  },
-  {
-    id: "5",
-    title: "Dance Competition - Regionals",
-    description: "Participated in the regional semi-classical dance competition.",
-    category: "Dance",
-    date: "Feb 20, 2026",
-    location: "City Arts Center",
-    organizer: "Regional Arts Board",
-    source: "user",
-    status: "completed",
-  },
+const USER_CATEGORIES: EventCategory[] = [
+  "Hackathon", "Media", "Dance", "Programming", "Cultural", "Sports", "Other"
 ];
 
 type TabKey = "all" | "campus" | "user" | "registered" | "ongoing" | "completed" | "won" | "history";
@@ -147,12 +96,14 @@ const defaultForm = {
 };
 
 export default function EventsPage() {
-  const [events, setEvents] = useState<AcadEvent[]>(mockEvents);
+  const { data: events, add, update, remove, loading } = useFirestore<AcadEvent>("events");
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(defaultForm);
-  const [proofUploading, setProofUploading] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
   const getCategoryColor = (category: EventCategory) => {
     switch (category) {
@@ -183,51 +134,82 @@ export default function EventsPage() {
   });
 
   const registerEvent = (id: string) => {
-    setEvents((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, status: "registered" } : e))
-    );
-  };
-
-  const handleCreateEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newEvent: AcadEvent = {
-      id: Date.now().toString(),
-      title: form.title,
-      description: form.description,
-      category: form.category,
-      date: form.date,
-      location: form.location,
-      organizer: form.organizer,
-      link: form.link || undefined,
-      source: "user",
-      status: "upcoming",
-    };
-    setEvents((prev) => [newEvent, ...prev]);
-    setShowModal(false);
-    setForm(defaultForm);
-  };
-
-  const handleProofUpload = (eventId: string) => {
-    setProofUploading(eventId);
-    // Simulate upload
-    setTimeout(() => {
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === eventId ? { ...e, proofUrl: "uploaded_proof.pdf" } : e
-        )
-      );
-      setProofUploading(null);
-    }, 1500);
+    update(id, { status: "registered" });
   };
 
   const markWon = (id: string) => {
-    setEvents((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, status: "won" } : e))
-    );
+    update(id, { status: "won" });
   };
 
-  const deleteEvent = (id: string) => {
-    setEvents((prev) => prev.filter((e) => e.id !== id));
+  const openCreateModal = () => {
+    setEditingId(null);
+    setForm(defaultForm);
+    setShowModal(true);
+  };
+
+  const openEditModal = (event: AcadEvent) => {
+    setEditingId(event.id);
+    setForm({
+      title: event.title,
+      description: event.description,
+      category: event.category,
+      date: event.date,
+      location: event.location,
+      organizer: event.organizer,
+      link: event.link || "",
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.organizer.trim() || !form.date) return;
+
+    if (editingId) {
+      await update(editingId, { ...form });
+    } else {
+      await add({
+        ...form,
+        source: "user",
+        status: "upcoming",
+      });
+    }
+    setForm(defaultForm);
+    setShowModal(false);
+  };
+
+  const handleProofUpload = async (eventId: string, file: File) => {
+    if (!file) return;
+
+    const storageRef = ref(storage, `event_proofs/${eventId}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(prev => ({ ...prev, [eventId]: progress }));
+      },
+      (error) => {
+        console.error("Upload error:", error);
+        setUploadProgress(prev => {
+          const next = { ...prev };
+          delete next[eventId];
+          return next;
+        });
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        await update(eventId, { 
+          proofUrl: downloadURL,
+          proofName: file.name
+        });
+        setUploadProgress(prev => {
+          const next = { ...prev };
+          delete next[eventId];
+          return next;
+        });
+      }
+    );
   };
 
   return (
@@ -238,14 +220,13 @@ export default function EventsPage() {
           <p className="text-gray-400 mt-1">Discover campus events and track your own activities</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openCreateModal}
           className="btn-primary flex items-center justify-center gap-2"
         >
           <Plus className="w-5 h-5" /> Add My Event
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1">
         {TABS.map((tab) => (
           <button
@@ -263,7 +244,6 @@ export default function EventsPage() {
         ))}
       </div>
 
-      {/* Search */}
       <div className="relative w-full max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input
@@ -275,7 +255,6 @@ export default function EventsPage() {
         />
       </div>
 
-      {/* Events Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatePresence>
           {filtered.map((event, i) => (
@@ -284,11 +263,9 @@ export default function EventsPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ delay: i * 0.04 }}
               key={event.id}
               className="dash-card group relative p-0 overflow-hidden flex flex-col hover:border-purple-500/30 transition-all"
             >
-              {/* Top Banner */}
               <div className={`h-36 flex flex-col items-center justify-center relative ${
                 event.source === "campus"
                   ? "bg-gradient-to-br from-purple-500/10 to-cyan-500/10"
@@ -299,7 +276,6 @@ export default function EventsPage() {
                 </div>
                 <span className="text-white/30 font-semibold tracking-wider uppercase text-xs">{event.source === "campus" ? "Campus Event" : "My Event"}</span>
 
-                {/* Status Badge */}
                 {event.status !== "upcoming" && (
                   <div className={`absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     event.status === "won" ? "bg-amber-500 text-white" :
@@ -317,13 +293,10 @@ export default function EventsPage() {
                   <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md border ${getCategoryColor(event.category)}`}>
                     {event.category}
                   </span>
-                  <button
-                    onClick={() => deleteEvent(event.id)}
-                    className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
-                    title="Delete Event"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => openEditModal(event)} className="p-1 rounded text-gray-500 hover:text-purple-400 hover:bg-white/[0.1] transition-colors"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => setConfirmDelete(event.id)} className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  </div>
                 </div>
 
                 <h3 className="text-base font-bold text-gray-100 mb-2 line-clamp-1">{event.title}</h3>
@@ -331,59 +304,43 @@ export default function EventsPage() {
 
                 <div className="space-y-1.5 mt-auto">
                   <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <CalendarDays className="w-3.5 h-3.5 text-purple-400" /> {event.date}
+                    <CalendarDays className="w-3.5 h-3.5 text-purple-400" />
+                    {event.date ? format(new Date(event.date + "T12:00:00"), "MMM d, yyyy") : "TBD"}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <MapPin className="w-3.5 h-3.5 text-cyan-400" /> {event.location}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <Users className="w-3.5 h-3.5 text-emerald-400" /> By {event.organizer}
-                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400"><MapPin className="w-3.5 h-3.5 text-cyan-400" /> {event.location}</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400"><Users className="w-3.5 h-3.5 text-emerald-400" /> By {event.organizer}</div>
                 </div>
 
-                {/* Actions */}
                 <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
                   {event.status === "upcoming" && (
-                    <button
-                      onClick={() => registerEvent(event.id)}
-                      className="w-full text-xs font-medium px-4 py-2 rounded-xl text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
-                    >
-                      Register / Join
-                    </button>
+                    <button onClick={() => registerEvent(event.id)} className="w-full text-xs font-medium px-4 py-2 rounded-xl text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-colors">Register / Join</button>
                   )}
                   {event.status === "registered" && (
                     <div className="flex gap-2">
                       {event.link && (
-                        <a
-                          href={event.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 text-xs font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 px-3 py-2 rounded-xl transition-colors flex items-center gap-1 justify-center"
-                        >
-                          Event Portal <ExternalLink className="w-3 h-3" />
-                        </a>
+                        <a href={event.link} target="_blank" rel="noopener noreferrer" className="flex-1 text-xs font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 px-3 py-2 rounded-xl transition-colors flex items-center gap-1 justify-center">Event Portal <ExternalLink className="w-3 h-3" /></a>
                       )}
-                      <button
-                        onClick={() => markWon(event.id)}
-                        className="flex-1 text-xs font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 rounded-xl border border-amber-500/20 transition-colors"
-                      >
-                        Mark as Won
-                      </button>
+                      <button onClick={() => markWon(event.id)} className="flex-1 text-xs font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 rounded-xl border border-amber-500/20 transition-colors">Mark as Won</button>
                     </div>
                   )}
                   {(event.status === "completed" || event.status === "won") && (
-                    <button
-                      onClick={() => handleProofUpload(event.id)}
-                      disabled={!!event.proofUrl || proofUploading === event.id}
-                      className={`w-full text-xs font-medium px-4 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors ${
-                        event.proofUrl
-                          ? "text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 cursor-default"
-                          : "text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
-                      }`}
-                    >
-                      <UploadCloud className="w-3.5 h-3.5" />
-                      {proofUploading === event.id ? "Uploading..." : event.proofUrl ? "Proof Uploaded ✓" : "Upload Prize/Certificate"}
-                    </button>
+                    <div className="space-y-2">
+                      <label className={`w-full text-xs font-medium px-4 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                        event.proofUrl ? "text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10" : "text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20"
+                      }`}>
+                        <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleProofUpload(event.id, e.target.files[0])} disabled={!!uploadProgress[event.id]} />
+                        {uploadProgress[event.id] !== undefined ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {uploadProgress[event.id].toFixed(0)}% Uploading</>
+                        ) : event.proofUrl ? (
+                          <><CheckCircle2 className="w-3.5 h-3.5" /> Proof Uploaded</>
+                        ) : (
+                          <><UploadCloud className="w-3.5 h-3.5" /> Upload Prize/Certificate</>
+                        )}
+                      </label>
+                      {event.proofUrl && (
+                        <a href={event.proofUrl} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-center text-gray-500 hover:text-white transition-colors underline truncate">{event.proofName || "View Proof"}</a>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -392,7 +349,7 @@ export default function EventsPage() {
         </AnimatePresence>
       </div>
 
-      {filtered.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="text-center py-20 bg-white/[0.02] border border-white/[0.06] rounded-2xl border-dashed">
           <Trophy className="w-10 h-10 text-gray-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-300 mb-1">No events found</h3>
@@ -400,7 +357,7 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Create Event Modal */}
+      {/* Create / Edit Modal */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -417,103 +374,61 @@ export default function EventsPage() {
               className="w-full max-w-lg bg-[#030712] border border-white/[0.1] rounded-2xl shadow-2xl p-6 my-4"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-purple-400" />
-                  Add My Event
-                </h2>
-                <button onClick={() => setShowModal(false)} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-purple-400" />{editingId ? "Edit My Event" : "Add My Event"}</h2>
+                <button onClick={() => setShowModal(false)} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors"><X className="w-5 h-5" /></button>
               </div>
 
-              <form onSubmit={handleCreateEvent} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Event Title *</label>
-                  <input
-                    required
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="e.g. National Hackathon 2026"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                  />
+                  <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. National Hackathon" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Category *</label>
-                    <CustomSelect
-                      value={form.category}
-                      onChange={(v) => setForm({ ...form, category: v as EventCategory })}
-                      options={USER_CATEGORIES.map((c) => ({ value: c, label: c }))}
-                    />
+                    <CustomSelect value={form.category} onChange={(v) => setForm({ ...form, category: v as EventCategory })} options={USER_CATEGORIES.map((c) => ({ value: c, label: c }))} />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Date / Duration *</label>
-                    <input
-                      required
-                      value={form.date}
-                      onChange={(e) => setForm({ ...form, date: e.target.value })}
-                      placeholder="e.g. Mar 28-29, 2026"
-                      className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                    />
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Event Date *</label>
+                    <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]" />
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Location</label>
-                    <input
-                      value={form.location}
-                      onChange={(e) => setForm({ ...form, location: e.target.value })}
-                      placeholder="e.g. Online"
-                      className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                    />
+                    <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Online" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Organizer *</label>
-                    <input
-                      required
-                      value={form.organizer}
-                      onChange={(e) => setForm({ ...form, organizer: e.target.value })}
-                      placeholder="e.g. GeeksForGeeks"
-                      className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                    />
+                    <input required value={form.organizer} onChange={(e) => setForm({ ...form, organizer: e.target.value })} placeholder="e.g. Google" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Description</label>
-                  <textarea
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    placeholder="Brief description of the event..."
-                    rows={2}
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all resize-none"
-                  />
+                  <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief details..." rows={2} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all resize-none" />
                 </div>
-
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Event Link (Optional)</label>
-                  <input
-                    value={form.link}
-                    onChange={(e) => setForm({ ...form, link: e.target.value })}
-                    placeholder="https://..."
-                    type="url"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all"
-                  />
+                  <input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://..." type="url" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                 </div>
-
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] transition-all">
-                    Cancel
-                  </button>
-                  <button type="submit" className="flex-1 btn-primary">Add Event</button>
+                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] transition-all">Cancel</button>
+                  <button type="submit" className="flex-1 btn-primary">{editingId ? "Save Changes" : "Add Event"}</button>
                 </div>
               </form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete && remove(confirmDelete)}
+        title="Delete Event?"
+        message="This action cannot be undone. This event will be removed from your list."
+      />
     </div>
   );
 }
+

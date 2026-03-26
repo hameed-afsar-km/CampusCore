@@ -47,6 +47,7 @@ const navItems: NavItem[] = [
   { label: "Announcements", href: "/announcements", icon: <Bell className="w-5 h-5" /> },
   { label: "Events", href: "/events", icon: <Trophy className="w-5 h-5" /> },
   { label: "Attendance", href: "/attendance", icon: <CheckCircle2 className="w-5 h-5" /> },
+  { label: "Collaboration", href: "/collaboration", icon: <Users className="w-5 h-5" /> },
 ];
 
 export default function DashboardLayout({

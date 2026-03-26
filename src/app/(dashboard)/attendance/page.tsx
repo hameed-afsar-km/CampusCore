@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Plus, 
@@ -11,12 +11,11 @@ import {
   Info,
   RotateCcw,
   BookOpen,
-  CalendarDays,
-  MoreVertical,
-  MinusCircle,
   TrendingUp,
   BarChart3
 } from "lucide-react";
+import { useFirestore } from "@/lib/use-firestore";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 
 interface SubjectAttendance {
   id: string;
@@ -26,88 +25,49 @@ interface SubjectAttendance {
 }
 
 export default function AttendancePage() {
-  const [subjects, setSubjects] = useState<SubjectAttendance[]>([]);
+  const { data: subjects, add, update, remove, loading } = useFirestore<SubjectAttendance>("attendance");
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", held: 0, attended: 0 });
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string, type: "delete" | "reset" } | null>(null);
 
-  // Load from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("attendance_data");
-    if (saved) {
-      try {
-        setSubjects(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse attendance data", e);
-      }
-    } else {
-      // Mock initial data
-      setSubjects([
-        { id: "1", name: "Mathematics IV", held: 24, attended: 20 },
-        { id: "2", name: "Operating Systems", held: 30, attended: 22 },
-        { id: "3", name: "Database Systems", held: 18, attended: 15 },
-      ]);
-    }
-  }, []);
-
-  // Save to localStorage
-  useEffect(() => {
-    if (subjects.length > 0) {
-      localStorage.setItem("attendance_data", JSON.stringify(subjects));
-    }
-  }, [subjects]);
-
-  const addSubject = (e: React.FormEvent) => {
+  const addSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
     
-    const newSubject: SubjectAttendance = {
-      id: Date.now().toString(),
+    await add({
       name: form.name,
       held: Number(form.held) || 0,
       attended: Number(form.attended) || 0,
-    };
+    });
 
-    setSubjects(prev => [newSubject, ...prev]);
     setShowModal(false);
     setForm({ name: "", held: 0, attended: 0 });
   };
 
-  const deleteSubject = (id: string) => {
-    setSubjects(prev => prev.filter(s => s.id !== id));
+  const handleConfirmAction = async () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.type === "delete") {
+      await remove(confirmDelete.id);
+    } else {
+      await update(confirmDelete.id, { held: 0, attended: 0 });
+    }
+    setConfirmDelete(null);
   };
 
-  const logAttendance = (id: string, wasAttended: boolean) => {
-    setSubjects(prev => prev.map(s => {
-      if (s.id === id) {
-        return {
-          ...s,
-          held: s.held + 1,
-          attended: wasAttended ? s.attended + 1 : s.attended
-        };
-      }
-      return s;
-    }));
-  };
-
-  const resetAttendance = (id: string) => {
-    if (!confirm("Reset all counts for this subject?")) return;
-    setSubjects(prev => prev.map(s => 
-      s.id === id ? { ...s, held: 0, attended: 0 } : s
-    ));
+  const logAttendance = async (id: string, wasAttended: boolean) => {
+    const sub = subjects.find(s => s.id === id);
+    if (!sub) return;
+    await update(id, {
+      held: sub.held + 1,
+      attended: wasAttended ? sub.attended + 1 : sub.attended
+    });
   };
 
   const calculateStats = (s: SubjectAttendance) => {
     const percentage = s.held > 0 ? (s.attended / s.held) * 100 : 0;
     const missed = s.held - s.attended;
-    
-    // How many more classes can you miss?
-    // formula: attended / (held + x) >= 0.75 => x <= (attended / 0.75) - held
     const safeSkips = Math.floor(s.attended / 0.75) - s.held;
-    
-    // How many MORE classes to attend to reach 75%?
-    // formula: (attended + y) / (held + y) >= 0.75 => y >= (0.75*held - attended) / 0.25
     const needed = Math.max(0, Math.ceil((0.75 * s.held - s.attended) / 0.25));
-
     return { percentage, missed, safeSkips, needed };
   };
 
@@ -150,14 +110,14 @@ export default function AttendancePage() {
                   </div>
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
-                      onClick={() => resetAttendance(sub.id)}
+                      onClick={() => setConfirmDelete({ id: sub.id, type: "reset" })}
                       className="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
                       title="Reset counts"
                     >
                       <RotateCcw className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => deleteSubject(sub.id)}
+                      onClick={() => setConfirmDelete({ id: sub.id, type: "delete" })}
                       className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -323,6 +283,16 @@ export default function AttendancePage() {
           </div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleConfirmAction}
+        title={confirmDelete?.type === "delete" ? "Delete Subject?" : "Reset Attendance?"}
+        message={confirmDelete?.type === "delete" 
+          ? "This will permanently remove this subject and all its attendance history." 
+          : "This will reset all attendance counts for this subject to zero."}
+      />
     </div>
   );
 }

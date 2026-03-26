@@ -1,13 +1,16 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
+import { useAuth } from "./auth-context";
 
 export type CalEventType = "exam" | "assignment" | "todo" | "event" | "holiday";
 
 export interface CalendarEvent {
   id: string;
   title: string;
-  date: string; // yyyy-MM-dd
+  date: string; // ISO string or YYYY-MM-DD
   type: CalEventType;
   time?: string;
   location?: string;
@@ -15,51 +18,72 @@ export interface CalendarEvent {
 
 interface CalendarContextType {
   events: CalendarEvent[];
-  addEvent: (event: CalendarEvent) => void;
-  removeEvent: (id: string) => void;
-  updateEvent: (id: string, partial: Partial<CalendarEvent>) => void;
 }
 
 const CalendarContext = createContext<CalendarContextType>({
   events: [],
-  addEvent: () => {},
-  removeEvent: () => {},
-  updateEvent: () => {},
 });
 
 export function useCalendar() {
   return useContext(CalendarContext);
 }
 
-const INITIAL_EVENTS: CalendarEvent[] = [
-  { id: "cal-1", title: "DBMS Mid Term", date: "2026-03-25", type: "exam", time: "10:00 AM", location: "Hall A" },
-  { id: "cal-2", title: "OS Lab Submission", date: "2026-03-22", type: "assignment", time: "11:59 PM" },
-  { id: "cal-3", title: "Tech Symposium", date: "2026-03-28", type: "event", time: "09:00 AM", location: "Main Auditorium" },
-  { id: "cal-4", title: "College Foundation Day", date: "2026-03-30", type: "holiday" },
-];
-
 export function CalendarProvider({ children }: { children: ReactNode }) {
-  const [events, setEvents] = useState<CalendarEvent[]>(INITIAL_EVENTS);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const { user } = useAuth();
 
-  const addEvent = (event: CalendarEvent) => {
-    setEvents((prev) => {
-      if (prev.find((e) => e.id === event.id)) return prev;
-      return [...prev, event];
+  useEffect(() => {
+    if (!user) {
+      setEvents([]);
+      return;
+    }
+
+    const unsubs: (() => void)[] = [];
+    const sourceData: Record<string, CalendarEvent[]> = {};
+
+    const syncConfigs = [
+      { name: "todos", type: "todo" as const, dateField: "dueDate", titleField: "text" },
+      { name: "exams", type: "exam" as const, dateField: "date", titleField: "subject", prefix: "Exam" },
+      { name: "assignments", type: "assignment" as const, dateField: "dueDate", titleField: "title" },
+      { name: "events", type: "event" as const, dateField: "date", titleField: "title" },
+    ];
+
+    syncConfigs.forEach((config) => {
+      const q = query(collection(db, config.name), where("userId", "==", user.uid));
+      
+      const unsub = onSnapshot(q, (snapshot) => {
+        const items = snapshot.docs.map(doc => {
+          const data = doc.data();
+          let date = data[config.dateField];
+          
+          if (date && typeof date === "object" && "toDate" in date) {
+            date = date.toDate().toISOString().split("T")[0];
+          } else if (date && typeof date === "string" && date.includes("T")) {
+            date = date.split("T")[0];
+          }
+
+          return {
+            id: `${config.type}-${doc.id}`,
+            title: config.prefix ? `${config.prefix}: ${data[config.titleField]}` : data[config.titleField],
+            date: date || "",
+            type: config.type,
+            time: data.time || "",
+            location: data.location || "",
+          };
+        }).filter(e => e.date);
+
+        sourceData[config.name] = items;
+        setEvents(Object.values(sourceData).flat());
+      });
+
+      unsubs.push(unsub);
     });
-  };
 
-  const removeEvent = (id: string) => {
-    setEvents((prev) => prev.filter((e) => e.id !== id));
-  };
-
-  const updateEvent = (id: string, partial: Partial<CalendarEvent>) => {
-    setEvents((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, ...partial } : e))
-    );
-  };
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user]);
 
   return (
-    <CalendarContext.Provider value={{ events, addEvent, removeEvent, updateEvent }}>
+    <CalendarContext.Provider value={{ events }}>
       {children}
     </CalendarContext.Provider>
   );
