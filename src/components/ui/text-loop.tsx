@@ -35,12 +35,12 @@ export function TextLoop({
   if (words.length === 0) return null;
 
   return (
-    <div className="relative inline-flex flex-col h-[1.3em] align-top overflow-hidden">
+    <div className="relative inline-flex flex-col h-[1.3em] align-top">
       {/* Width-Gage: This invisible layer renders all words overlapping in a single CSS grid cell
           to force the parent container to ALWAYS maintain exactly the width of the longest phrase. */}
-      <div className="grid invisible h-0 pointer-events-none select-none" aria-hidden="true">
+      <div className="grid invisible h-0 pointer-events-none select-none px-4" aria-hidden="true">
         {words.map((word, i) => (
-          <div key={i} className={cn("col-start-1 row-start-1 px-1", className)}>{word}</div>
+          <div key={i} className={cn("col-start-1 row-start-1", className)}>{word}</div>
         ))}
       </div>
 
@@ -55,7 +55,7 @@ export function TextLoop({
              ease: [0.16, 1, 0.3, 1],
            }}
            className={cn(
-             "absolute top-0 left-0 w-full h-full flex items-center justify-center lg:justify-start whitespace-nowrap",
+             "absolute top-0 left-0 w-full h-full flex items-center justify-center lg:justify-start whitespace-nowrap px-4",
              className
            )}
         >

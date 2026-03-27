@@ -13,6 +13,18 @@ import { Input } from './input';
 import { BackgroundPaths } from './background-paths';
 import { Typewriter } from './typewriter-text';
 
+const LOGIN_TEXTS = [
+  "Sign in to your campus dashboard",
+  "Manage your notes with ease",
+  "Track your assignments and tests"
+];
+
+const SIGNUP_TEXTS = [
+  "Begin your academic journey with CampusCore",
+  "One platform. Every need.",
+  "Built for Student Success."
+];
+
 interface AuthPageProps {
   type: 'login' | 'signup';
   email: string;
@@ -82,19 +94,7 @@ export function AuthPage({
             </h1>
             <div className="h-5">
               <Typewriter 
-                text={
-                  type === 'login' 
-                    ? [
-                        "Sign in to your campus dashboard",
-                        "Manage your notes with ease",
-                        "Track your assignments and tests"
-                      ]
-                    : [
-                        "Begin your academic journey with CampusCore",
-                        "One platform. Every need.",
-                        "Built for Student Success."
-                      ]
-                }
+                text={type === 'login' ? LOGIN_TEXTS : SIGNUP_TEXTS}
                 speed={70}
                 deleteSpeed={40}
                 loop={true}

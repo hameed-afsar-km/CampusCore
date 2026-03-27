@@ -49,23 +49,37 @@ export function useFirestore<T extends { id?: string }>(
       );
     }
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const items: T[] = [];
-        snapshot.forEach((doc) => {
-          items.push({ id: doc.id, ...doc.data() } as T);
-        });
-        setData(items);
-        setLoading(false);
-      },
-      (err) => {
-        console.error(`Error fetching ${collectionName}:`, err);
-        setError(err instanceof Error ? err : new Error(String(err)));
-        setLoading(false);
-      }
-    );
+    const startListener = (currentQuery: any, isFallback: boolean = false) => {
+      return onSnapshot(
+        currentQuery,
+        (snapshot) => {
+          const items: T[] = [];
+          snapshot.forEach((doc) => {
+            items.push({ id: doc.id, ...doc.data() } as T);
+          });
+          setData(items);
+          setError(null);
+          setLoading(false);
+        },
+        (err) => {
+          if (!isFallback && user) {
+            console.warn(`Firestore [${collectionName}] complex query failed. Falling back to simple ownership query...`, err.message);
+            const fallbackQuery = query(
+              collection(db, collectionName),
+              where("userId", "==", user.uid),
+              orderBy("createdAt", "desc")
+            );
+            unsubscribe = startListener(fallbackQuery, true);
+          } else {
+            console.error(`Firestore [${collectionName}] fatal error:`, err);
+            setError(err instanceof Error ? err : new Error(String(err)));
+            setLoading(false);
+          }
+        }
+      );
+    };
 
+    let unsubscribe = startListener(q);
     return () => unsubscribe();
   }, [collectionName, user?.uid, userSpecific]);
 
@@ -122,15 +136,19 @@ export function useFirestoreDoc<T>(collectionName: string, docId: string | undef
         }
         setLoading(false);
       },
-      (err) => {
-        console.error(`Error fetching ${collectionName}/${docId}:`, err);
+      (err: any) => {
+        console.error(`[Firestore Error] Collection: ${collectionName}`, {
+          code: err.code,
+          message: err.message,
+          uid: user?.uid || "NULL" // Use user from useAuth()
+        });
         setError(err instanceof Error ? err : new Error(String(err)));
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [collectionName, docId]);
+  }, [collectionName, docId, user?.uid]); // Added user?.uid to dependencies
 
   const upsert = async (item: Partial<T>) => {
     if (!docId) throw new Error("DocId is required for upsert.");

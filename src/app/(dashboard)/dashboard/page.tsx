@@ -17,11 +17,13 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useFirestore } from "@/lib/use-firestore";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { format, isToday, isAfter, addDays } from "date-fns";
 
 export default function DashboardPage() {
   const { userData } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   
   const { data: assignments } = useFirestore<any>("assignments");
   const { data: exams } = useFirestore<any>("exams");
@@ -80,7 +82,6 @@ export default function DashboardPage() {
     { label: "Current CGPA", value: latestCGPA, icon: TrendingUp, color: "from-cyan-400 to-blue-500" },
   ];
 
-//   Wait, I need to import Bell
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -109,7 +110,7 @@ export default function DashboardPage() {
           className="text-right"
         >
           <div className="text-sm font-medium text-gray-400 mb-1 backdrop-blur-md bg-white/[0.03] px-4 py-1.5 rounded-full border border-white/[0.05] shadow-inner">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            {mounted ? new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : "Loading date..."}
           </div>
         </motion.div>
       </div>
