@@ -52,9 +52,9 @@ export function useFirestore<T extends { id?: string }>(
     const startListener = (currentQuery: any, isFallback: boolean = false) => {
       return onSnapshot(
         currentQuery,
-        (snapshot) => {
+        (snapshot: any) => {
           const items: T[] = [];
-          snapshot.forEach((doc) => {
+          snapshot.forEach((doc: any) => {
             items.push({ id: doc.id, ...doc.data() } as T);
           });
           setData(items);
@@ -114,6 +114,7 @@ export function useFirestore<T extends { id?: string }>(
  * Specialized hook for a single document (e.g., user profiles, settings)
  */
 export function useFirestoreDoc<T>(collectionName: string, docId: string | undefined) {
+  const { user } = useAuth();
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
