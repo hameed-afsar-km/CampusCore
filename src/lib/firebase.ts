@@ -15,6 +15,7 @@ const firebaseConfig = {
 
 let firebaseApp: any;
 let auth: any;
+let secondaryAuth: any;
 let db: any;
 let storage: any;
 
@@ -31,15 +32,21 @@ const createProxy = (name: string) => new Proxy({}, {
 if (firebaseConfig.apiKey) {
   firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
   auth = getAuth(firebaseApp);
+  
+  // Secondary App for creating users without logging out
+  const secondaryApp = getApps().find(a => a.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
+  secondaryAuth = getAuth(secondaryApp);
+
   db = getFirestore(firebaseApp);
   storage = getStorage(firebaseApp);
 } else {
   // Graceful fallback for build-time worker threads or local dev without .env
   firebaseApp = createProxy('App');
   auth = createProxy('Auth');
+  secondaryAuth = createProxy('Auth');
   db = createProxy('Firestore');
   storage = createProxy('Storage');
 }
 
-export { auth, db, storage };
+export { auth, secondaryAuth, db, storage };
 export default firebaseApp;

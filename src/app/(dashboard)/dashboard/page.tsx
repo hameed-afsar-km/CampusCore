@@ -78,8 +78,8 @@ export default function DashboardPage() {
   const stats = [
     { label: "Events Today", value: todaySchedule.length.toString(), icon: BookOpen, color: "from-purple-500 to-indigo-500" },
     { label: "Pending Tasks", value: pendingTasks.toString(), icon: CheckSquare, color: "from-amber-400 to-orange-500" },
-    { label: "Attendance", value: avgAttendance, icon: Clock, color: "from-emerald-400 to-teal-500" },
-    { label: "Current CGPA", value: latestCGPA, icon: TrendingUp, color: "from-cyan-400 to-blue-500" },
+    { label: "Announcements", value: announcements.length.toString(), icon: Clock, color: "from-emerald-400 to-teal-500" },
+    { label: userData?.role === "student" ? "Current CGPA" : "Role", value: userData?.role === "student" ? latestCGPA : (userData?.role?.toUpperCase() || "N/A"), icon: TrendingUp, color: "from-cyan-400 to-blue-500" },
   ];
 
   return (
@@ -100,7 +100,7 @@ export default function DashboardPage() {
             transition={{ delay: 0.1 }}
             className="text-gray-400 mt-1"
           >
-            Here&apos;s what&apos;s happening with your academics today.
+            Here&apos;s what&apos;s happening {userData?.role === 'student' ? 'with your academics' : 'on campus'} today.
           </motion.p>
         </div>
         <motion.div 
@@ -144,48 +144,50 @@ export default function DashboardPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main Column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Upcoming Deadlines */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="dash-card border-amber-500/20"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2 text-amber-500">
-                <AlertTriangle className="w-5 h-5" />
-                <h3 className="font-semibold text-white">Upcoming Deadlines</h3>
+          {/* Upcoming Deadlines (Students Only) */}
+          {userData?.role === "student" && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="dash-card border-amber-500/20"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2 text-amber-500">
+                  <AlertTriangle className="w-5 h-5" />
+                  <h3 className="font-semibold text-white">Upcoming Deadlines</h3>
+                </div>
+                <Link href="/assignments" className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1">
+                  View All <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
-              <Link href="/assignments" className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1">
-                View All <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
 
-            <div className="space-y-3">
-              {upcomingDeadlines.length > 0 ? (
-                upcomingDeadlines.map((item: any, i: number) => (
-                  <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors">
-                    <div>
-                      <h4 className="font-medium text-[0.95rem] mb-1">{item.title}</h4>
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        <span className={`badge ${item.color}`}>{item.type}</span>
-                        <span>•</span>
-                        <span>{item.subject}</span>
+              <div className="space-y-3">
+                {upcomingDeadlines.length > 0 ? (
+                  upcomingDeadlines.map((item: any, i: number) => (
+                    <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors">
+                      <div>
+                        <h4 className="font-medium text-[0.95rem] mb-1">{item.title}</h4>
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                          <span className={`badge ${item.color}`}>{item.type}</span>
+                          <span>•</span>
+                          <span>{item.subject}</span>
+                        </div>
+                      </div>
+                      <div className="text-left sm:text-right">
+                        <div className="text-sm font-medium text-amber-400 flex items-center gap-1.5 sm:justify-end">
+                          <Clock className="w-3.5 h-3.5" />
+                          {format(new Date(item.dueDate || item.date), "MMM d, h:mm a")}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-left sm:text-right">
-                      <div className="text-sm font-medium text-amber-400 flex items-center gap-1.5 sm:justify-end">
-                        <Clock className="w-3.5 h-3.5" />
-                        {format(new Date(item.dueDate || item.date), "MMM d, h:mm a")}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-6 text-gray-500 text-sm">No upcoming deadlines</div>
-              )}
-            </div>
-          </motion.div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-gray-500 text-sm">No upcoming deadlines</div>
+                )}
+              </div>
+            </motion.div>
+          )}
 
           {/* Today's Schedule */}
           <motion.div
@@ -276,17 +278,56 @@ export default function DashboardPage() {
             <h3 className="font-semibold text-white mb-5">Quick Actions</h3>
             
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Add Task", icon: CheckSquare, color: "text-emerald-400", bg: "from-emerald-500/10 to-transparent", href: "/todo" },
-                { label: "Upload Notes", icon: ClipboardList, color: "text-purple-400", bg: "from-purple-500/10 to-transparent", href: "/notes" },
-                { label: "Join Event", icon: Trophy, color: "text-cyan-400", bg: "from-cyan-500/10 to-transparent", href: "/events" },
-                { label: "Check Marks", icon: BarChart3, color: "text-amber-400", bg: "from-amber-500/10 to-transparent", href: "/marks" },
-              ].map((action, i) => (
-                <Link key={i} href={action.href} className={`flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br ${action.bg} border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg`}>
-                  <action.icon className={`w-6 h-6 ${action.color}`} />
-                  <span className="text-xs text-center font-medium text-gray-300">{action.label}</span>
-                </Link>
-              ))}
+              {userData?.role === "admin" ? (
+                <>
+                  <Link href="/users" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <Trophy className="w-6 h-6 text-purple-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Manage Users</span>
+                  </Link>
+                  <Link href="/announcements" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <Bell className="w-6 h-6 text-emerald-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">New Announce</span>
+                  </Link>
+                  <Link href="/events" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <BarChart3 className="w-6 h-6 text-cyan-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Add Event</span>
+                  </Link>
+                </>
+              ) : userData?.role === "professor" ? (
+                <>
+                  <Link href="/students" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <CheckSquare className="w-6 h-6 text-emerald-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Manage Students</span>
+                  </Link>
+                  <Link href="/assignments" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <ClipboardList className="w-6 h-6 text-purple-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Add Assignment</span>
+                  </Link>
+                  <Link href="/marks" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <BarChart3 className="w-6 h-6 text-cyan-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Add Marks</span>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/todo" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <CheckSquare className="w-6 h-6 text-emerald-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Add Task</span>
+                  </Link>
+                  <Link href="/notes" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <ClipboardList className="w-6 h-6 text-purple-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Upload Notes</span>
+                  </Link>
+                  <Link href="/events" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <Trophy className="w-6 h-6 text-cyan-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Join Event</span>
+                  </Link>
+                  <Link href="/marks" className="flex flex-col items-center justify-center gap-3 p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-transparent border border-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all hover:-translate-y-1 shadow-lg">
+                    <BarChart3 className="w-6 h-6 text-amber-400" />
+                    <span className="text-xs text-center font-medium text-gray-300">Check Marks</span>
+                  </Link>
+                </>
+              )}
             </div>
           </motion.div>
         </div>

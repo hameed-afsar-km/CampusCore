@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
@@ -59,16 +59,26 @@ interface Profile {
   photoURL?: string;
 }
 
+interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  text: string;
+  createdAt: any;
+}
+
 type TabType = "collaborations" | "friends";
 
 export default function CollaborationPage() {
   const { user, userData } = useAuth();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<TabType>("collaborations");
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteType, setInviteType] = useState<"project" | "friend">("friend");
-  const [inviteLink, setInviteLink] = useState("");
-  const [copied, setCopied] = useState(false);
+  
+  // Chat States
+  const [selectedChatUser, setSelectedChatUser] = useState<Profile | null>(null);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Firestore Data
   const [friendships, setFriendships] = useState<Friendship[]>([]);
@@ -146,6 +156,36 @@ export default function CollaborationPage() {
     return () => clearTimeout(timer);
   }, [search, user?.uid]);
 
+  // Chat listener
+  useEffect(() => {
+    if (!selectedChatUser || !user) return;
+    const chatId = [user.uid, selectedChatUser.uid].sort().join('_');
+    const q = query(
+      collection(db, "messages"),
+      where("chatId", "==", chatId)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      msgs.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
+      setChatMessages(msgs);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    });
+    return () => unsub();
+  }, [selectedChatUser, user]);
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !user || !selectedChatUser) return;
+    const chatId = [user.uid, selectedChatUser.uid].sort().join('_');
+    await addDoc(collection(db, "messages"), {
+      chatId,
+      senderId: user.uid,
+      text: chatInput.trim(),
+      createdAt: serverTimestamp(),
+    });
+    setChatInput("");
+  };
+
   const sendFriendRequest = async (receiverId: string) => {
     if (!user) return;
     // Check if already exists
@@ -195,6 +235,7 @@ export default function CollaborationPage() {
       case "document": return <FileText className="w-4 h-4 text-purple-400" />;
       case "project": return <FolderKanban className="w-4 h-4 text-cyan-400" />;
       case "study-group": return <BookOpen className="w-4 h-4 text-emerald-400" />;
+      case "event": return <MessageSquare className="w-4 h-4 text-amber-400" />;
       default: return <MessageSquare className="w-4 h-4 text-gray-400" />;
     }
   };
@@ -209,7 +250,7 @@ export default function CollaborationPage() {
   // Invite to Collab Modal States
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Profile | null>(null);
-  const [collabResource, setCollabResource] = useState<"document" | "project" | "study-group">("document");
+  const [collabResource, setCollabResource] = useState<"document" | "project" | "study-group" | "event">("document");
   const [collabItemId, setCollabItemId] = useState("");
   const [collabItems, setCollabItems] = useState<{ id: string, title: string }[]>([]);
 
@@ -217,8 +258,17 @@ export default function CollaborationPage() {
   useEffect(() => {
     if (!showCollabModal || !user) return;
     const fetchItems = async () => {
-      const col = collabResource === "document" ? "notes" : collabResource === "project" ? "assignments" : "exams";
-      const q = query(collection(db, col), where("userId", "==", user.uid));
+      let col = "notes";
+      if (collabResource === "project") col = "assignments";
+      if (collabResource === "study-group") col = "exams";
+      if (collabResource === "event") col = "events";
+
+      let q;
+      if (collabResource === "event") {
+        q = query(collection(db, "college_events")); // Admins/Profs can invite to global events
+      } else {
+        q = query(collection(db, col), where("userId", "==", user.uid));
+      }
       const snap = await getDocs(q);
       setCollabItems(snap.docs.map(doc => ({ id: doc.id, title: (doc.data() as any).title || (doc.data() as any).subject || "Untitled" })));
     };
@@ -243,17 +293,7 @@ export default function CollaborationPage() {
     setCollabItemId("");
   };
 
-  const generateLink = () => {
-    const fakeLink = `https://campuscore.app/invite/${Math.random().toString(36).substring(2, 10)}`;
-    setInviteLink(fakeLink);
-  };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(inviteLink).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
 
   const acceptedFriends = friendships
     .filter(f => f.status === "accepted")
@@ -271,15 +311,9 @@ export default function CollaborationPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Collaboration</h1>
-          <p className="text-gray-400 mt-1">Manage invites, shared files, friends, and study groups</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Collaboration & Chat</h1>
+          <p className="text-gray-400 mt-1">Chat with friends, share notes, and invite to events</p>
         </div>
-        <button
-          onClick={() => { setShowInviteModal(true); setInviteLink(""); }}
-          className="btn-primary flex items-center justify-center gap-2"
-        >
-          <Link2 className="w-5 h-5" /> Generate Invite Link
-        </button>
       </div>
 
       {/* Tabs */}
@@ -476,8 +510,8 @@ export default function CollaborationPage() {
                       <button onClick={() => setConfirmDelete({ id: friendships.find(f => f.participants.includes(friend.uid))?.id!, type: "friend" })} className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"><X className="w-4 h-4" /></button>
                     </div>
                     <div className="flex gap-2">
-                      <button className="flex-1 text-xs font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1"><GraduationCap className="w-3.5 h-3.5" /> View Profile</button>
-                      <button onClick={() => { setSelectedFriend(friend); setShowCollabModal(true); }} className="flex-1 text-xs font-medium text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1"><Link2 className="w-3.5 h-3.5" /> Invite to Collab</button>
+                      <button onClick={() => setSelectedChatUser(friend)} className="flex-1 text-xs font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> Message</button>
+                      <button onClick={() => { setSelectedFriend(friend); setShowCollabModal(true); }} className="flex-1 text-xs font-medium text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1"><Link2 className="w-3.5 h-3.5" /> Invite</button>
                     </div>
                   </motion.div>
                 ))}
@@ -495,29 +529,67 @@ export default function CollaborationPage() {
         </div>
       )}
 
-      {/* Invite Modal */}
+      {/* Chat Modal */}
       <AnimatePresence>
-        {showInviteModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && setShowInviteModal(false)}>
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="w-full max-w-md bg-[#030712] border border-white/[0.1] rounded-2xl shadow-2xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Link2 className="w-5 h-5 text-purple-400" />Generate Invite Link</h2>
-                <button onClick={() => setShowInviteModal(false)} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors"><X className="w-5 h-5" /></button>
+        {selectedChatUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-sm shadow-2xl" onClick={(e) => e.target === e.currentTarget && setSelectedChatUser(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="w-full max-w-lg bg-[#030712] border border-white/[0.1] rounded-2xl flex flex-col h-[600px] max-h-[85vh] overflow-hidden">
+              {/* Chat Header */}
+              <div className="p-4 border-b border-white/[0.1] flex items-center justify-between bg-white/[0.02]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center font-bold text-white text-sm uppercase shadow-md">
+                    {selectedChatUser?.displayName?.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-100">{selectedChatUser?.displayName}</h3>
+                    <p className="text-[10px] text-emerald-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedChatUser(null)} className="p-2 text-gray-400 hover:bg-white/[0.1] hover:text-white rounded-lg transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <div className="space-y-4">
-                <button onClick={generateLink} className="w-full btn-primary">Generate Link</button>
-                {inviteLink && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Your Invite Link</label>
-                    <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-                      <p className="flex-1 text-sm text-purple-300 font-mono truncate">{inviteLink}</p>
-                      <button onClick={copyLink} className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all ${copied ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-white/[0.08] text-gray-300 hover:text-white"}`}><Copy className="w-3.5 h-3.5" />{copied ? "Copied!" : "Copy"}</button>
-                    </div>
-                  </motion.div>
+
+              {/* Chat Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/40">
+                {chatMessages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                    <MessageSquare className="w-10 h-10 mb-2 opacity-20" />
+                    <p className="text-sm">No messages yet. Say hi!</p>
+                  </div>
+                ) : (
+                  chatMessages.map(msg => {
+                    const isMe = msg.senderId === user?.uid;
+                    return (
+                      <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm ${isMe ? "bg-purple-600 text-white rounded-tr-sm" : "bg-[#1f2430] text-gray-200 border border-white/[0.05] rounded-tl-sm"}`}>
+                          <p>{msg.text}</p>
+                          <p className={`text-[9px] mt-1 text-right ${isMe ? "text-purple-300" : "text-gray-500"}`}>
+                            {msg.createdAt ? new Date(msg.createdAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "..."}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
+                <div ref={messagesEndRef} />
               </div>
+
+              {/* Chat Input */}
+              <form onSubmit={sendMessage} className="p-4 bg-white/[0.02] border-t border-white/[0.1] flex items-center gap-2">
+                <input 
+                  type="text" 
+                  value={chatInput} 
+                  onChange={e => setChatInput(e.target.value)} 
+                  placeholder="Type a message..." 
+                  className="flex-1 bg-[#0a0e17] border border-white/[0.1] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-purple-500/50 transition-all text-gray-200"
+                />
+                <button type="submit" disabled={!chatInput.trim()} className="bg-purple-600 text-white p-2.5 rounded-xl hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Send className="w-5 h-5" />
+                </button>
+              </form>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -536,7 +608,8 @@ export default function CollaborationPage() {
                   <select value={collabResource} onChange={(e) => setCollabResource(e.target.value as any)} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none">
                     <option value="document">Notes</option>
                     <option value="project">Assignments</option>
-                    <option value="study-group">Exams (Study Group)</option>
+                    <option value="study-group">Exams</option>
+                    <option value="event">Campus Events</option>
                   </select>
                 </div>
                 <div>

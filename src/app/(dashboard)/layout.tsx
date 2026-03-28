@@ -37,17 +37,30 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
-  { label: "Assignments", href: "/assignments", icon: <ClipboardList className="w-5 h-5" /> },
-  { label: "To-Do List", href: "/todo", icon: <CheckSquare className="w-5 h-5" /> },
-  { label: "Notes", href: "/notes", icon: <FileText className="w-5 h-5" /> },
-  { label: "Exams & Tests", href: "/exams", icon: <BookOpen className="w-5 h-5" /> },
-  { label: "Marks Tracker", href: "/marks", icon: <BarChart3 className="w-5 h-5" /> },
-  { label: "Calendar", href: "/calendar", icon: <Calendar className="w-5 h-5" /> },
-  { label: "Announcements", href: "/announcements", icon: <Bell className="w-5 h-5" /> },
-  { label: "Events", href: "/events", icon: <Trophy className="w-5 h-5" /> },
-  { label: "Attendance", href: "/attendance", icon: <CheckCircle2 className="w-5 h-5" /> },
-  { label: "Collaboration", href: "/collaboration", icon: <Users className="w-5 h-5" /> },
+  // Common
+  { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
+  { label: "Announcements", href: "/announcements", icon: <Bell className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
+  { label: "Events", href: "/events", icon: <Trophy className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
+  
+  // Admin only
+  { label: "Manage Users", href: "/users", icon: <Users className="w-5 h-5" />, roles: ["admin"] },
+  
+  // Faculty only
+  { label: "Manage Students", href: "/students", icon: <Users className="w-5 h-5" />, roles: ["professor"] },
+  
+  // Faculty & Student
+  { label: "Assignments", href: "/assignments", icon: <ClipboardList className="w-5 h-5" />, roles: ["professor", "student"] },
+  { label: "Marks Tracker", href: "/marks", icon: <BarChart3 className="w-5 h-5" />, roles: ["professor", "student"] },
+  
+  // Student, Admin, Professor
+  { label: "To-Do List", href: "/todo", icon: <CheckSquare className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
+  
+  // Student only
+  { label: "Notes", href: "/notes", icon: <FileText className="w-5 h-5" />, roles: ["student"] },
+  { label: "Exams & Tests", href: "/exams", icon: <BookOpen className="w-5 h-5" />, roles: ["student"] },
+  { label: "Calendar", href: "/calendar", icon: <Calendar className="w-5 h-5" />, roles: ["student"] },
+  { label: "Attendance", href: "/attendance", icon: <CheckCircle2 className="w-5 h-5" />, roles: ["student"] },
+  { label: "Collaboration", href: "/collaboration", icon: <Users className="w-5 h-5" />, roles: ["student", "professor"] },
 ];
 
 export default function DashboardLayout({
@@ -63,7 +76,9 @@ export default function DashboardLayout({
     await logout();
   };
 
-  // We stripped out roles check because this app is purely tailored for Students now.
+  const filteredNavItems = navItems.filter((item) => 
+    !item.roles || (userData?.role && item.roles.includes(userData.role))
+  );
 
   return (
     <ProtectedRoute>
@@ -163,7 +178,7 @@ export default function DashboardLayout({
         {/* Desktop Dock Navbar */}
         <div className="hidden lg:block fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <Dock className="items-end pb-3 bg-[#030712]/80 backdrop-blur-xl border border-white/[0.06] shadow-2xl">
-            {navItems.map((item, idx) => (
+            {filteredNavItems.map((item, idx) => (
               <Link href={item.href} key={idx}>
                 <DockItem className="aspect-square rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.05] text-white">
                   <DockLabel>{item.label}</DockLabel>
@@ -189,7 +204,7 @@ export default function DashboardLayout({
                 </div>
               } 
             />
-            {navItems.map((item, idx) => (
+            {filteredNavItems.map((item, idx) => (
               <Link key={idx} href={item.href}>
                 <MenuItem icon={<div className="text-white hover:text-purple-400">{item.icon}</div>} />
               </Link>

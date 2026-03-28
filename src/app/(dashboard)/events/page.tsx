@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
-import { storage } from "@/lib/firebase";
+import { storage, db } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { format } from "date-fns";
 import {
@@ -72,6 +74,10 @@ const USER_CATEGORIES: EventCategory[] = [
   "Hackathon", "Media", "Dance", "Programming", "Cultural", "Sports", "Other"
 ];
 
+const CAMPUS_CATEGORIES: EventCategory[] = [
+  "Technical", "Cultural", "Sports", "Workshop", "Other"
+];
+
 type TabKey = "all" | "campus" | "user" | "registered" | "ongoing" | "completed" | "won" | "history";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
@@ -96,13 +102,25 @@ const defaultForm = {
 };
 
 export default function EventsPage() {
-  const { data: events, add, update, remove, loading } = useFirestore<AcadEvent>("events");
+  const { userData } = useAuth();
+  const isAdminOrProfessor = userData?.role === "admin" || userData?.role === "professor";
+
+  const { data: userEvents, add: addUserEvent, update: updateUserEvent, remove: removeUserEvent, loading: loadingUser } = useFirestore<AcadEvent>("events", true);
+  const { data: campusEvents, loading: loadingCampus } = useFirestore<AcadEvent>("college_events", false);
+  
+  const loading = loadingUser || loadingCampus;
+
+  const events = useMemo(() => {
+    return [...userEvents, ...campusEvents];
+  }, [userEvents, campusEvents]);
+
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isEditingCampus, setIsEditingCampus] = useState(false);
   const [form, setForm] = useState(defaultForm);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string, isCampus: boolean } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
   const getCategoryColor = (category: EventCategory) => {
@@ -133,22 +151,32 @@ export default function EventsPage() {
     }
   });
 
-  const registerEvent = (id: string) => {
-    update(id, { status: "registered" });
+  const registerEvent = async (id: string, isCampus: boolean) => {
+    if (isCampus) {
+      // For a real app, this should add a document to an 'event_registrations' collection
+      alert("Registration for Campus Events is noted.");
+    } else {
+      updateUserEvent(id, { status: "registered" });
+    }
   };
 
   const markWon = (id: string) => {
-    update(id, { status: "won" });
+    updateUserEvent(id, { status: "won" });
   };
 
   const openCreateModal = () => {
     setEditingId(null);
-    setForm(defaultForm);
+    setIsEditingCampus(isAdminOrProfessor);
+    setForm({
+      ...defaultForm,
+      category: isAdminOrProfessor ? "Technical" : "Hackathon"
+    });
     setShowModal(true);
   };
 
   const openEditModal = (event: AcadEvent) => {
     setEditingId(event.id);
+    setIsEditingCampus(event.source === "campus");
     setForm({
       title: event.title,
       description: event.description,
@@ -165,17 +193,40 @@ export default function EventsPage() {
     e.preventDefault();
     if (!form.title.trim() || !form.organizer.trim() || !form.date) return;
 
-    if (editingId) {
-      await update(editingId, { ...form });
+    if (isAdminOrProfessor && isEditingCampus) {
+      if (editingId) {
+        await updateDoc(doc(db, "college_events", editingId), { ...form });
+      } else {
+        await addDoc(collection(db, "college_events"), {
+          ...form,
+          source: "campus",
+          status: "upcoming",
+          createdAt: serverTimestamp(),
+        });
+      }
     } else {
-      await add({
-        ...form,
-        source: "user",
-        status: "upcoming",
-      });
+      if (editingId) {
+        await updateUserEvent(editingId, { ...form });
+      } else {
+        await addUserEvent({
+          ...form,
+          source: "user",
+          status: "upcoming",
+        });
+      }
     }
     setForm(defaultForm);
     setShowModal(false);
+  };
+
+  const performDelete = async () => {
+    if (!confirmDelete) return;
+    if (confirmDelete.isCampus && isAdminOrProfessor) {
+      await deleteDoc(doc(db, "college_events", confirmDelete.id));
+    } else {
+      await removeUserEvent(confirmDelete.id);
+    }
+    setConfirmDelete(null);
   };
 
   const handleProofUpload = async (eventId: string, file: File) => {
@@ -199,7 +250,12 @@ export default function EventsPage() {
       },
       async () => {
         const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        await update(eventId, { 
+        
+        if (isAdminOrProfessor && editingId && isEditingCampus) { // Actually, proofs are user specific, let's just use updateUserEvent.
+           // However wait, campus events don't have proofUrl per user easily because we combined them.
+           // Actually, the students wouldn't be uploading proofs for campus events since status won't be completed/won unless they own it.
+        }
+        await updateUserEvent(eventId, { 
           proofUrl: downloadURL,
           proofName: file.name
         });
@@ -295,7 +351,7 @@ export default function EventsPage() {
                   </span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => openEditModal(event)} className="p-1 rounded text-gray-500 hover:text-purple-400 hover:bg-white/[0.1] transition-colors"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => setConfirmDelete(event.id)} className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => setConfirmDelete({ id: event.id, isCampus: event.source === "campus" })} className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
 
@@ -313,7 +369,7 @@ export default function EventsPage() {
 
                 <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
                   {event.status === "upcoming" && (
-                    <button onClick={() => registerEvent(event.id)} className="w-full text-xs font-medium px-4 py-2 rounded-xl text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-colors">Register / Join</button>
+                    <button onClick={() => registerEvent(event.id, event.source === "campus")} className="w-full text-xs font-medium px-4 py-2 rounded-xl text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-colors">Register / Join</button>
                   )}
                   {event.status === "registered" && (
                     <div className="flex gap-2">
@@ -424,7 +480,7 @@ export default function EventsPage() {
       <ConfirmModal
         isOpen={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        onConfirm={() => confirmDelete && remove(confirmDelete)}
+        onConfirm={performDelete}
         title="Delete Event?"
         message="This action cannot be undone. This event will be removed from your list."
       />
