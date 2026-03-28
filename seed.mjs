@@ -2,13 +2,15 @@ import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, setDoc, doc, serverTimestamp } from "firebase/firestore";
 
+
+
 const firebaseConfig = {
-  apiKey: "AIzaSyB4qYGwVMvztuKzIpf7vZFPCf-wjmwnpzs",
-  authDomain: "campuscore-827b1.firebaseapp.com",
-  projectId: "campuscore-827b1",
-  storageBucket: "campuscore-827b1.firebasestorage.app",
-  messagingSenderId: "95859449655",
-  appId: "1:95859449655:web:55c73f1cdc1a051c5084b2"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
