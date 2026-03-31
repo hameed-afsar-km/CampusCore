@@ -214,7 +214,7 @@ function SubjectModal({
               <CustomSelect
                 value={form.credits.toString()}
                 onChange={(v) => setForm({ ...form, credits: Number(v) })}
-                options={[1, 2, 3, 4, 5, 6].map((c) => ({ value: c.toString(), label: c.toString() }))}
+                options={[0, 1, 2, 3, 4].map((c) => ({ value: c.toString(), label: c.toString() }))}
               />
             </div>
             <div>

@@ -312,8 +312,44 @@ export default function CollaborationPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Collaboration & Chat</h1>
-          <p className="text-gray-400 mt-1">Chat with friends, share notes, and invite to events</p>
+          <p className="text-gray-400 mt-1">Chat with friends, share notes, and join workspaces.</p>
         </div>
+      </div>
+
+      {/* Join via Link Row */}
+      <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center">
+        <div className="flex items-center gap-3 flex-1 w-full">
+          <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+            <Link2 className="w-5 h-5 text-purple-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-200">Join a Workspace</h3>
+            <p className="text-xs text-gray-500">Have a share link from a classmate? Paste it below to join.</p>
+          </div>
+        </div>
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            const input = new FormData(e.currentTarget).get("link") as string;
+            if (input && input.includes("/share/")) {
+              window.location.href = input;
+            } else if (input) {
+              alert("Please enter a valid CampusCore share link.");
+            }
+          }}
+          className="flex w-full sm:w-auto gap-2"
+        >
+          <input 
+            type="url" 
+            name="link" 
+            placeholder="https://.../share/notes/..." 
+            className="w-full sm:w-64 bg-[#0a0e17] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2 text-sm outline-none transition-all text-gray-200"
+            required
+          />
+          <button type="submit" className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-purple-500 transition-colors whitespace-nowrap">
+            Join Now
+          </button>
+        </form>
       </div>
 
       {/* Tabs */}

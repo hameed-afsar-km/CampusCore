@@ -34,7 +34,7 @@ export default function CommunityHub() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sticky top-0 md:top-16 z-20 bg-[#030712]/95 backdrop-blur-xl pt-2 pb-4 border-b border-white/[0.06] -mx-6 px-6 md:-mx-8 md:px-8">
+      <div className="flex flex-col gap-4 relative bg-[#030712] pb-6 border-b border-white/[0.06] mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Community & Network</h1>
           <p className="text-gray-400 mt-1 text-sm">Connect with peers and manage users.</p>
