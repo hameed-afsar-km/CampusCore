@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { useFirestore } from "@/lib/use-firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
+import { useAuth } from "@/lib/auth-context";
+import FacultyAttendance from "./FacultyAttendance";
 
 interface SubjectAttendance {
   id: string;
@@ -25,10 +27,28 @@ interface SubjectAttendance {
 }
 
 export default function AttendancePage() {
+  const { userData } = useAuth();
   const { data: subjects, add, update, remove, loading } = useFirestore<SubjectAttendance>("attendance");
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", held: 0, attended: 0 });
   const [confirmDelete, setConfirmDelete] = useState<{ id: string, type: "delete" | "reset" } | null>(null);
+
+  if (userData?.role === "professor") {
+    return (
+      <div className="space-y-6 max-w-6xl mx-auto">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Faculty Attendance Panel</h1>
+          <p className="text-gray-400 mt-1">Manage class attendance and view reports</p>
+        </div>
+        <FacultyAttendance />
+      </div>
+    );
+  }
+
+  const lowAttendanceSubjects = subjects.filter(s => {
+    const percentage = s.held > 0 ? (s.attended / s.held) * 100 : 0;
+    return s.held > 0 && percentage < 75;
+  });
 
   const addSubject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +105,26 @@ export default function AttendancePage() {
           <Plus className="w-5 h-5" /> Add Subject
         </button>
       </div>
+
+      <AnimatePresence>
+        {lowAttendanceSubjects.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-start gap-3"
+          >
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider mb-1">Low Attendance Alert</h3>
+              <p className="text-sm text-red-400/80 font-medium">
+                Your attendance is below 75% in: {lowAttendanceSubjects.map(s => s.name).join(', ')}. 
+                Please attend upcoming classes to avoid trouble.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatePresence>

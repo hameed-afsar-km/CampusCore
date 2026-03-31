@@ -35,6 +35,7 @@ interface Note {
   type: "pdf" | "doc" | "image";
   url: string;
   storagePath: string;
+  userId?: string;
 }
 
 const ALL_ALLOWED_MIMES = [
@@ -119,8 +120,11 @@ export default function NotesPage() {
   };
 
   const generateShareLink = (note: Note): string => {
-    // In a real app, this would point to a public page. For now, it's the direct Firebase link
-    return note.url;
+    // Generate an app-specific generic sharing link
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/share/notes/${note.id}`;
+    }
+    return note.url; // fallback to direct link
   };
 
   const handleShareClick = (note: Note) => {
@@ -171,25 +175,31 @@ export default function NotesPage() {
       },
       (error) => {
         console.error("Upload failed:", error);
-        setFileError("Upload failed. please try again.");
+        setFileError("Upload failed: Check your internet or file permissions.");
         setUploadProgress(null);
       },
       async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        await add({
-          name: selectedFile.name.replace(/\.[^/.]+$/, ""),
-          subject: subjectInput.trim(),
-          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-          size: formatBytes(selectedFile.size),
-          type: getFileType(selectedFile),
-          url: downloadURL,
-          storagePath: storagePath,
-        });
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          await add({
+            name: selectedFile.name.replace(/\.[^/.]+$/, ""),
+            subject: subjectInput.trim(),
+            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            size: formatBytes(selectedFile.size),
+            type: getFileType(selectedFile),
+            url: downloadURL,
+            storagePath: storagePath,
+          });
 
-        setShowUploadModal(false);
-        setSelectedFile(null);
-        setSubjectInput("");
-        setUploadProgress(null);
+          setShowUploadModal(false);
+          setSelectedFile(null);
+          setSubjectInput("");
+          setUploadProgress(null);
+        } catch (addError) {
+          console.error("Firestore database error:", addError);
+          setFileError("File uploaded, but failed to save note details.");
+          setUploadProgress(null);
+        }
       }
     );
   };
@@ -249,6 +259,12 @@ export default function NotesPage() {
               key={note.id}
               className="dash-card group relative p-5 hover:border-purple-500/30 transition-all"
             >
+              {/* Shared Indicator */}
+              {note.userId !== user?.uid && (
+                <div className="absolute top-2 right-2 z-10 bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-[10px] font-bold border border-purple-500/30 flex items-center gap-1">
+                  SHARED
+                </div>
+              )}
               <a
                 href={note.url}
                 target="_blank"
@@ -282,15 +298,19 @@ export default function NotesPage() {
                   <button
                     onClick={() => handleShareClick(note)}
                     className="p-1.5 text-gray-400 hover:text-purple-400 hover:bg-purple-400/10 rounded-lg transition-colors"
+                    title="Share Link"
                   >
                     <Share2 className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => setConfirmDelete(note)}
-                    className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {note.userId === user?.uid && (
+                    <button
+                      onClick={() => setConfirmDelete(note)}
+                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      title="Delete Note"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -350,6 +370,17 @@ export default function NotesPage() {
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copied ? "Copied!" : "Copy"}
                 </button>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                <p className="text-xs text-gray-500 mb-2">Or download the direct file:</p>
+                <a 
+                  href={shareNote.url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] rounded-xl text-sm font-medium transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" /> 
+                  Open Original File
+                </a>
               </div>
             </motion.div>
           </motion.div>

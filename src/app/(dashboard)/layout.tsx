@@ -37,30 +37,11 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  // Common
   { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
-  { label: "Announcements", href: "/announcements", icon: <Bell className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
-  { label: "Events", href: "/events", icon: <Trophy className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
-  
-  // Admin only
-  { label: "Manage Users", href: "/users", icon: <Users className="w-5 h-5" />, roles: ["admin"] },
-  
-  // Faculty only
-  { label: "Manage Students", href: "/students", icon: <Users className="w-5 h-5" />, roles: ["professor"] },
-  
-  // Faculty & Student
-  { label: "Assignments", href: "/assignments", icon: <ClipboardList className="w-5 h-5" />, roles: ["professor", "student"] },
-  { label: "Marks Tracker", href: "/marks", icon: <BarChart3 className="w-5 h-5" />, roles: ["professor", "student"] },
-  
-  // Student, Admin, Professor
-  { label: "To-Do List", href: "/todo", icon: <CheckSquare className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
-  
-  // Student only
-  { label: "Notes", href: "/notes", icon: <FileText className="w-5 h-5" />, roles: ["student"] },
-  { label: "Exams & Tests", href: "/exams", icon: <BookOpen className="w-5 h-5" />, roles: ["student"] },
-  { label: "Calendar", href: "/calendar", icon: <Calendar className="w-5 h-5" />, roles: ["student"] },
-  { label: "Attendance", href: "/attendance", icon: <CheckCircle2 className="w-5 h-5" />, roles: ["student"] },
-  { label: "Collaboration", href: "/collaboration", icon: <Users className="w-5 h-5" />, roles: ["student", "professor"] },
+  { label: "Academics", href: "/academics", icon: <BookOpen className="w-5 h-5" />, roles: ["professor", "student"] },
+  { label: "Schedules", href: "/schedules", icon: <Calendar className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
+  { label: "Campus Life", href: "/campus", icon: <Bell className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
+  { label: "Community", href: "/community", icon: <Users className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
 ];
 
 export default function DashboardLayout({
@@ -121,9 +102,6 @@ export default function DashboardLayout({
           {/* Navigation - Disabled for Desktop Bottom Dock */}
           <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
              {/* Left blank; we use Dock and Fluid Menu now */}
-             <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
-               Use the dock at the bottom of the screen to navigate.
-             </div>
           </div>
 
           {/* User Profile & Actions */}

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Bell,
   Megaphone,
@@ -14,7 +15,7 @@ import {
   AlertTriangle,
   Clock,
   Pin,
-  MoreVertical,
+  Trash2,
   X
 } from "lucide-react";
 import { format } from "date-fns";
@@ -27,6 +28,18 @@ export default function AnnouncementsPage() {
   const { data: announcements, loading } = useFirestore<any>("announcements", false);
   const [showModal, setShowModal] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const performDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await deleteDoc(doc(db, "announcements", confirmDelete));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setConfirmDelete(null);
+    }
+  };
 
   // Form states
   const [title, setTitle] = useState("");
@@ -155,8 +168,11 @@ export default function AnnouncementsPage() {
                   </div>
 
                   {canPost && (
-                    <button className="flex-shrink-0 p-1 rounded-md text-gray-500 hover:bg-white/[0.1] hover:text-white transition-colors">
-                      <MoreVertical className="w-4 h-4" />
+                    <button 
+                      onClick={() => setConfirmDelete(announcement.id)}
+                      className="flex-shrink-0 p-1 rounded-md text-gray-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   )}
                 </div>
@@ -273,6 +289,13 @@ export default function AnnouncementsPage() {
           </div>
         )}
       </AnimatePresence>
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={performDelete}
+        title="Delete Announcement?"
+        message="This action cannot be undone."
+      />
     </div>
   );
 }

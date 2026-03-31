@@ -16,8 +16,12 @@ import {
   BookOpen,
   Trash2,
   Edit2,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { CustomSelect } from "@/components/ui/custom-select";
+import { useAuth } from "@/lib/auth-context";
 
 type Status = "pending" | "submitted" | "overdue";
 type AssignmentType = "Theory" | "Practical" | "Mini Project" | "Lab Report";
@@ -30,6 +34,7 @@ interface Assignment {
   status: Status;
   type: AssignmentType;
   description?: string;
+  userId?: string;
 }
 
 const defaultForm = {
@@ -48,6 +53,20 @@ export default function AssignmentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const { user } = useAuth();
+  const [shareAssignment, setShareAssignment] = useState<Assignment | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleShareClick = (a: Assignment) => setShareAssignment(a);
+  const handleCopyLink = () => {
+    if (!shareAssignment) return;
+    const link = `${window.location.origin}/share/assignments/${shareAssignment.id}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const filteredAssignments = assignments.filter((a) => {
     if (activeTab === "pending" && a.status === "submitted") return false;
@@ -152,6 +171,11 @@ export default function AssignmentsPage() {
               key={assignment.id}
               className="dash-card group relative p-5 hover:border-purple-500/30 transition-all"
             >
+              {assignment.userId !== user?.uid && (
+                <div className="absolute top-2 right-2 z-10 bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-[10px] font-bold border border-purple-500/30 flex items-center gap-1">
+                  SHARED
+                </div>
+              )}
               <div className="flex items-start justify-between mb-4">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                   assignment.status === "submitted" ? "bg-emerald-500/10 text-emerald-400" : assignment.status === "overdue" ? "bg-red-500/10 text-red-400" : "bg-purple-500/10 text-purple-400"
@@ -160,8 +184,19 @@ export default function AssignmentsPage() {
                 </div>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEditModal(assignment)} className="p-1.5 rounded-md text-gray-500 hover:bg-white/[0.1] hover:text-purple-400 transition-colors"><Edit2 className="w-4 h-4" /></button>
-                  <button onClick={() => setConfirmDelete(assignment.id)} className="p-1.5 rounded-md text-gray-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => handleShareClick(assignment)} className="p-1.5 rounded-md text-gray-500 hover:bg-white/[0.1] hover:text-purple-400 transition-colors" title="Share Link">
+                    <Share2 className="w-4 h-4" />
+                  </button>
+                  {assignment.userId === user?.uid && (
+                    <>
+                      <button onClick={() => openEditModal(assignment)} className="p-1.5 rounded-md text-gray-500 hover:bg-white/[0.1] hover:text-purple-400 transition-colors" title="Edit">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setConfirmDelete(assignment.id)} className="p-1.5 rounded-md text-gray-500 hover:bg-red-500/10 hover:text-red-400 transition-colors" title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -266,6 +301,57 @@ export default function AssignmentsPage() {
         title="Delete Assignment?"
         message="This action cannot be undone. This assignment will be removed from your list and calendar."
       />
+
+      <AnimatePresence>
+        {shareAssignment && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+            onClick={(e) => e.target === e.currentTarget && setShareAssignment(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-sm bg-[#030712] border border-white/[0.1] rounded-2xl shadow-2xl p-6"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-purple-400" /> Share Assignment
+                </h2>
+                <button onClick={() => setShareAssignment(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.1] transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 bg-white/[0.03] rounded-xl border border-white/[0.06] mb-4">
+                <FileText className="w-6 h-6 text-purple-400" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-200 text-sm truncate">{shareAssignment.title}</p>
+                  <p className="text-xs text-gray-500">{shareAssignment.subject}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
+                <p className="flex-1 text-xs font-mono text-purple-300 truncate">
+                   {typeof window !== 'undefined' ? `${window.location.origin}/share/assignments/${shareAssignment.id}` : ''}
+                </p>
+                <button
+                  onClick={handleCopyLink}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
+                    copied ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-white/[0.08] text-gray-300 hover:text-white"
+                  }`}
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
