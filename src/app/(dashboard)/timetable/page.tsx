@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { Plus, Trash2, Edit2, X, ShieldAlert, GraduationCap, Users, BookOpen, MapPin, Search, Calendar } from "lucide-react";
-import { DEPARTMENTS, SECTIONS, DAYS, TIME_SLOTS, DayOfWeek } from "@/lib/constants";
+import { DEPARTMENTS, SECTIONS, DAYS, TIME_SLOTS, DayOfWeek, PREDEFINED_COLORS } from "@/lib/constants";
 
 interface TimetableClass {
   id?: string;
@@ -25,6 +25,7 @@ interface TimetableClass {
   room: string;
   department: string;
   section: string;
+  color?: string;
 }
 
 interface Subject {
@@ -39,6 +40,7 @@ interface Subject {
   credits: number;
   facultyId: string;
   facultyName: string;
+  color?: string;
 }
 
 export default function TimetablePage() {
@@ -68,7 +70,7 @@ export default function TimetablePage() {
   const [selectedSlots, setSelectedSlots] = useState<{ day: DayOfWeek, slotId: string }[]>([]);
   
   const [subjectForm, setSubjectForm] = useState<Subject>({
-    classId: "", department: viewDept, section: viewSection, code: "", name: "", alias: "", subjectType: "Theory", credits: 3, facultyId: "", facultyName: ""
+    classId: "", department: viewDept, section: viewSection, code: "", name: "", alias: "", subjectType: "Theory", credits: 3, facultyId: "", facultyName: "", color: "purple"
   });
 
   const [classForm, setClassForm] = useState({
@@ -104,6 +106,14 @@ export default function TimetablePage() {
 
   const toggleSlotSelection = (day: DayOfWeek, slotId: string) => {
     if (!canEdit(viewDept, viewSection)) return;
+    
+    // Check if slot is occupied
+    const slotObj = TIME_SLOTS.find(s => s.id === slotId);
+    const dayClasses = (groupedClasses[day] || []) as TimetableClass[];
+    const isOccupied = dayClasses.some(c => `${c.timeStart} - ${c.timeEnd}` === slotObj?.label);
+    
+    if (isOccupied) return;
+
     const isSelected = selectedSlots.find(s => s.day === day && s.slotId === slotId);
     if (isSelected) {
       setSelectedSlots(selectedSlots.filter(s => !(s.day === day && s.slotId === slotId)));
@@ -117,9 +127,11 @@ export default function TimetablePage() {
     const sub = allSubjects.find(s => s.id === classForm.subjectId);
     if (!sub || selectedSlots.length === 0) return;
 
-    for (const slotSelect of selectedSlots) {
+    if (editingId) {
+      // Logic for editing a SINGLE existing slot
+      const slotSelect = selectedSlots[0];
       const slot = TIME_SLOTS.find(s => s.id === slotSelect.slotId);
-      if (!slot) continue;
+      if (!slot) return;
       
       const [start, end] = slot.label.split(" - ");
       const payload: any = { 
@@ -131,16 +143,36 @@ export default function TimetablePage() {
         subjectId: sub.id || "",
         subjectCode: sub.code, subjectName: sub.name, subjectAlias: sub.alias,
         subjectType: sub.subjectType,
-        facultyId: sub.facultyId, facultyName: sub.facultyName 
+        slotSubType: sub.subjectType === "LIT" ? classForm.slotSubType : undefined,
+        facultyId: sub.facultyId, facultyName: sub.facultyName,
+        color: sub.color || "purple" 
       };
-
-      if (sub.subjectType === "LIT") {
-        payload.slotSubType = classForm.slotSubType || "Theory";
+      await update(editingId, payload);
+    } else {
+      // Logic for BATCH adding new slots
+      for (const slotSelect of selectedSlots) {
+        const slot = TIME_SLOTS.find(s => s.id === slotSelect.slotId);
+        if (!slot) continue;
+        
+        const [start, end] = slot.label.split(" - ");
+        const payload: any = { 
+          day: slotSelect.day,
+          timeStart: start, timeEnd: end,
+          room: classForm.room.toUpperCase(),
+          department: viewDept, section: viewSection,
+          classId: sub.classId || "",
+          subjectId: sub.id || "",
+          subjectCode: sub.code, subjectName: sub.name, subjectAlias: sub.alias,
+          subjectType: sub.subjectType,
+          slotSubType: sub.subjectType === "LIT" ? classForm.slotSubType : undefined,
+          facultyId: sub.facultyId, facultyName: sub.facultyName,
+          color: sub.color || "purple"
+        };
+        await add(payload);
       }
-
-      await add(payload);
     }
     
+    setEditingId(null);
     setSelectedSlots([]);
     setShowClassModal(false);
   };
@@ -176,15 +208,24 @@ export default function TimetablePage() {
         {(isAdmin || isProfessor) && viewMode === "class" && canEdit(viewDept, viewSection) && (
           <div className="flex gap-2">
             {selectedSlots.length > 0 && (
-               <button
-                 onClick={() => { setClassForm({ ...classForm, room: "", subjectId: "" }); setShowClassModal(true); }}
-                 className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.4)] animate-pulse"
-               >
-                 <Calendar className="w-4 h-4" /> Allot {selectedSlots.length} Slot(s)
-               </button>
+               <>
+                 <button
+                   onClick={() => setSelectedSlots([])}
+                   className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+                   title="Clear Selection"
+                 >
+                   <X className="w-5 h-5" />
+                 </button>
+                 <button
+                   onClick={() => { setClassForm({ ...classForm, room: "", subjectId: "" }); setShowClassModal(true); }}
+                   className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.4)] animate-pulse"
+                 >
+                   <Calendar className="w-4 h-4" /> Allot {selectedSlots.length} Slots
+                 </button>
+               </>
             )}
             <button
-              onClick={() => { setSubjectForm({ department: viewDept, section: viewSection, code: "", name: "", alias: "", subjectType: "Theory", credits: 3, facultyId: "", facultyName: "" }); setEditingId(null); setShowSubjectModal(true); }}
+              onClick={() => { setSubjectForm({ department: viewDept, section: viewSection, code: "", name: "", alias: "", subjectType: "Theory", credits: 3, facultyId: "", facultyName: "", color: "purple" }); setEditingId(null); setShowSubjectModal(true); }}
               className="btn-primary text-xs flex items-center gap-2"
             >
               <Plus className="w-4 h-4" /> Add Subject
@@ -255,14 +296,14 @@ export default function TimetablePage() {
             )}
           </div>
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse bg-[#0a0e17]/50 min-w-[700px]">
+            <table className="w-full text-left border-collapse bg-[#0a0e17]/50 min-w-[1000px] table-fixed">
               <thead className="bg-[#05070a] border-b border-white/[0.06] text-xs text-gray-400 uppercase tracking-widest">
                 <tr>
-                  <th className="px-3 py-3 font-semibold w-16 border-r border-white/[0.06] text-center">Day</th>
+                  <th className="px-3 py-3 font-semibold w-[8%] border-r border-white/[0.06] text-center">Day</th>
                   {TIME_SLOTS.map(slot => (
-                    <th key={slot.id} className={`px-1 py-3 font-medium text-center border-r border-white/[0.06] ${slot.type === 'class' ? 'min-w-[75px]' : 'min-w-[40px] opacity-60'}`}>
+                    <th key={slot.id} className={`px-1 py-3 font-medium text-center border-r border-white/[0.06] w-[10.2%] ${slot.type !== 'class' ? 'opacity-60' : ''}`}>
                       {slot.type === 'class' && <div className="text-[9px] text-purple-400/80 mb-0.5">{slot.title}</div>}
-                      <div className="text-[10px] text-gray-500 tracking-tighter">{slot.label}</div>
+                      <div className="text-[10px] text-gray-500 tracking-tighter truncate px-1">{slot.label}</div>
                     </th>
                   ))}
                 </tr>
@@ -324,9 +365,14 @@ export default function TimetablePage() {
                                   {slotClasses.map((c: any, cIdx: number) => {
                                     const editable = canEdit(c.department || "", c.section || "");
                                     
+                                    // Robust color selection: Slot color -> Subject color -> Default purple
+                                    const masterSub = allSubjects.find(s => s.id === c.subjectId);
+                                    const subColor = c.color || masterSub?.color || "purple";
+                                    const colorTheme = PREDEFINED_COLORS.find(pc => pc.id === subColor) || PREDEFINED_COLORS[0];
+                                    
                                     return (
-                                      <div key={c.id} className={`relative bg-[#0d121c] rounded-md p-2 border transition-all shadow-sm flex flex-col min-h-full ${mergeColSpan > 1 ? 'border-purple-500/40 hover:border-purple-500' : 'border-white/[0.04] hover:border-purple-500/30'}`}>
-                                        <div className="font-bold text-purple-400 text-xs leading-none mb-1 max-w-[85px] truncate" title={c.subjectName}>
+                                      <div key={c.id} className={`relative rounded-md p-2 border transition-all shadow-sm flex flex-col min-h-full ${colorTheme.bg} ${colorTheme.border}`}>
+                                        <div className={`font-bold text-xs leading-none mb-1 max-w-[85px] truncate ${colorTheme.text}`} title={c.subjectName}>
                                           {c.subjectAlias || c.subjectCode || "Unk"}
                                           {c.subjectType === "LIT" && <span className="text-[9px] text-amber-500 ml-1">({c.slotSubType})</span>}
                                         </div>
@@ -413,37 +459,46 @@ export default function TimetablePage() {
                 {filteredSubjects.length === 0 ? (
                   <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500 text-xs italic">No subjects configured. Add subjects before building the timetable.</td></tr>
                 ) : (
-                  filteredSubjects.map(sub => (
-                    <tr key={sub.id} className="hover:bg-white/[0.01]">
-                      <td className="px-4 py-3 font-bold text-purple-400 tracking-wider text-xs">{sub.code} {sub.alias && <span className="text-gray-500 font-normal">({sub.alias})</span>}</td>
-                      <td className="px-4 py-3 font-medium text-gray-100">{sub.name}</td>
-                      <td className="px-4 py-3 text-center text-xs"><span className="bg-white/5 px-2 py-0.5 rounded">{sub.credits}</span></td>
-                      <td className="px-4 py-3">
-                         {sub.facultyName ? <div className="text-sm truncate">{sub.facultyName}</div> : <span className="text-gray-500 italic text-xs">Unassigned</span>}
-                      </td>
-                      {!isStudent && (
-                        <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
-                           <button onClick={() => { 
-                             setSubjectForm({
-                               classId: sub.classId || "",
-                               department: sub.department,
-                               section: sub.section,
-                               code: sub.code,
-                               name: sub.name,
-                               alias: sub.alias || "",
-                               subjectType: sub.subjectType || "Theory",
-                               credits: sub.credits,
-                               facultyId: sub.facultyId,
-                               facultyName: sub.facultyName
-                             });
-                             setEditingId(sub.id!);
-                             setShowSubjectModal(true);
-                           }} className="p-1.5 text-gray-500 hover:text-cyan-400 hover:bg-white/[0.05] rounded transition-colors"><Edit2 className="w-4 h-4"/></button>
-                           <button onClick={() => setConfirmDelete({ id: sub.id!, type: "subject" })} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-white/[0.05] rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  filteredSubjects.map(sub => {
+                    const colorTheme = PREDEFINED_COLORS.find(pc => pc.id === sub.color) || PREDEFINED_COLORS[0];
+                    return (
+                      <tr key={sub.id} className="hover:bg-white/[0.01]">
+                        <td className={`px-4 py-3 font-bold tracking-wider text-xs ${colorTheme.text}`}>
+                          <div className="flex items-center gap-2">
+                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colorTheme.hex }} />
+                             {sub.code} {sub.alias && <span className="text-gray-500 font-normal">({sub.alias})</span>}
+                          </div>
                         </td>
-                      )}
-                    </tr>
-                  ))
+                        <td className="px-4 py-3 font-medium text-gray-100">{sub.name}</td>
+                        <td className="px-4 py-3 text-center text-xs"><span className="bg-white/5 px-2 py-0.5 rounded">{sub.credits}</span></td>
+                        <td className="px-4 py-3">
+                           {sub.facultyName ? <div className="text-sm truncate">{sub.facultyName}</div> : <span className="text-gray-500 italic text-xs">Unassigned</span>}
+                        </td>
+                        {!isStudent && (
+                          <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
+                             <button onClick={() => { 
+                               setSubjectForm({
+                                 classId: sub.classId || "",
+                                 department: sub.department,
+                                 section: sub.section,
+                                 code: sub.code,
+                                 name: sub.name,
+                                 alias: sub.alias || "",
+                                 subjectType: sub.subjectType || "Theory",
+                                 credits: sub.credits,
+                                 facultyId: sub.facultyId,
+                                 facultyName: sub.facultyName,
+                                 color: sub.color || "purple"
+                               });
+                               setEditingId(sub.id!);
+                               setShowSubjectModal(true);
+                             }} className="p-1.5 text-gray-500 hover:text-cyan-400 hover:bg-white/[0.05] rounded transition-colors"><Edit2 className="w-4 h-4"/></button>
+                             <button onClick={() => setConfirmDelete({ id: sub.id!, type: "subject" })} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-white/[0.05] rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -533,6 +588,25 @@ export default function TimetablePage() {
                   </div>
                 </div>
                  <input required type="number" min={1} max={10} placeholder="Credits" value={subjectForm.credits} onChange={e => setSubjectForm({ ...subjectForm, credits: parseInt(e.target.value) || 0 })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500 rounded-lg p-2.5 text-sm outline-none transition-colors" />
+                 
+                 <div className="space-y-2">
+                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest pl-1">Identify Color</p>
+                    <div className="flex flex-wrap gap-2 p-1">
+                      {PREDEFINED_COLORS.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSubjectForm({ ...subjectForm, color: c.id })}
+                          className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                            subjectForm.color === c.id ? "border-white scale-110" : "border-transparent"
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                          title={c.id}
+                        />
+                      ))}
+                    </div>
+                 </div>
+
                  <select value={subjectForm.facultyId} onChange={e => setSubjectForm({ ...subjectForm, facultyId: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500 rounded-lg p-2.5 text-sm outline-none transition-colors">
                     <option value="" className="bg-[#0a0e17]">Assign Faculty (Optional)</option>
                     {professors.map((p: any) => <option key={p.uid} value={p.uid} className="bg-[#0a0e17]">{p.displayName}</option>)}
