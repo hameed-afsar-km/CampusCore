@@ -27,6 +27,8 @@ export interface UserData {
   email: string;
   displayName: string;
   role: UserRole;
+  department?: string;
+  section?: string;
   photoURL?: string;
   createdAt?: Date;
 }
@@ -40,13 +42,17 @@ interface AuthContextType {
     email: string,
     password: string,
     name: string,
-    role: UserRole
+    role: UserRole,
+    department?: string,
+    section?: string
   ) => Promise<void>;
   adminCreateUser: (
     email: string,
     password: string,
     name: string,
-    role: UserRole
+    role: UserRole,
+    department?: string,
+    section?: string
   ) => Promise<void>;
   signInGoogle: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
@@ -114,19 +120,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name: string,
-    role: UserRole
+    role: UserRole,
+    department?: string,
+    section?: string
   ) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
 
-    await setDoc(doc(db, "users", cred.user.uid), {
+    const userDataObj: any = {
       uid: cred.user.uid,
       email: cred.user.email,
       displayName: name,
       role,
       photoURL: cred.user.photoURL || "",
       createdAt: serverTimestamp(),
-    });
+    };
+    if (department) userDataObj.department = department;
+    if (section) userDataObj.section = section;
+
+    await setDoc(doc(db, "users", cred.user.uid), userDataObj);
 
     await fetchUserData(cred.user.uid);
   };
@@ -135,20 +147,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name: string,
-    role: UserRole
+    role: UserRole,
+    department?: string,
+    section?: string
   ) => {
     if (!secondaryAuth) throw new Error("Secondary auth not initialized.");
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     await updateProfile(cred.user, { displayName: name });
 
-    await setDoc(doc(db, "users", cred.user.uid), {
+    const userDataObj: any = {
       uid: cred.user.uid,
       email: cred.user.email,
       displayName: name,
       role,
       photoURL: cred.user.photoURL || "",
       createdAt: serverTimestamp(),
-    });
+    };
+    if (department) userDataObj.department = department;
+    if (section) userDataObj.section = section;
+
+    await setDoc(doc(db, "users", cred.user.uid), userDataObj);
 
     // Sign out from the secondary auth so it's clean for the next use
     await signOut(secondaryAuth);

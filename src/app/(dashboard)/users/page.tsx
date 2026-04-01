@@ -6,6 +6,8 @@ import { useAuth, UserRole } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
 import { Plus, Search, Mail, Shield, Trash2, X } from "lucide-react";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
+import { updateDoc, doc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function UsersPage() {
   const { userData, adminCreateUser } = useAuth();
@@ -20,7 +22,13 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
+  const [department, setDepartment] = useState("");
+  const [section, setSection] = useState("");
   const [error, setError] = useState("");
+
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editDept, setEditDept] = useState("");
+  const [editSection, setEditSection] = useState("");
 
   // Only admins can access this page
   if (userData?.role !== "admin") {
@@ -46,16 +54,30 @@ export default function UsersPage() {
     
     try {
       if (adminCreateUser) {
-        await adminCreateUser(email, password, name, role);
+        await adminCreateUser(email, password, name, role, department, section);
       } else {
         throw new Error("Action not available.");
       }
       setShowModal(false);
-      setName(""); setEmail(""); setPassword(""); setRole("student");
+      setName(""); setEmail(""); setPassword(""); setRole("student"); setDepartment(""); setSection("");
     } catch (err: any) {
       setError(err.message || "Failed to create user.");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      await updateDoc(doc(db, "users", editingUser.uid), {
+        department: editDept,
+        section: editSection
+      });
+      setEditingUser(null);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -91,7 +113,7 @@ export default function UsersPage() {
             <thead className="bg-white/[0.02] border-b border-white/[0.06] text-sm text-gray-400">
               <tr>
                 <th className="px-6 py-4 font-medium">Name</th>
-                <th className="px-6 py-4 font-medium">Role</th>
+                <th className="px-6 py-4 font-medium">Role & Dept/Sec</th>
                 <th className="px-6 py-4 font-medium">Email</th>
                 <th className="px-6 py-4 font-medium text-right">Actions</th>
               </tr>
@@ -121,13 +143,25 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium capitalize ${
-                        user.role === 'admin' ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                        user.role === 'professor' ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" :
-                        "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
-                      }`}>
-                        {user.role}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium capitalize ${
+                          user.role === 'admin' ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                          user.role === 'professor' ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" :
+                          "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                        }`}>
+                          {user.role}
+                        </span>
+                        {user.role === "student" && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">
+                              {user.department || "No Dept"}
+                            </span>
+                            <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">
+                              {user.section || "No Section"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-gray-400 text-sm">
@@ -137,12 +171,26 @@ export default function UsersPage() {
                     </td>
     <td className="px-6 py-4 text-right">
                       {user.uid !== userData?.uid && (
-                        <button 
-                          onClick={() => setConfirmDelete(user.id)}
-                          className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex justify-end gap-1">
+                          {user.role === "student" && (
+                            <button 
+                              onClick={() => {
+                                setEditingUser(user);
+                                setEditDept(user.department || "");
+                                setEditSection(user.section || "");
+                              }}
+                              className="p-2 text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
+                            >
+                              <Shield className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => setConfirmDelete(user.id)}
+                            className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -237,6 +285,31 @@ export default function UsersPage() {
                   </select>
                 </div>
 
+                {role === "student" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. CSE"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. A"
+                        value={section}
+                        onChange={(e) => setSection(e.target.value)}
+                        className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/[0.06] mt-6">
                   <button
                     type="button"
@@ -251,6 +324,85 @@ export default function UsersPage() {
                     className="btn-primary"
                   >
                     {isCreating ? "Creating..." : "Create User"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Modal (Department & Section) */}
+      <AnimatePresence>
+        {editingUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setEditingUser(null)}
+            />
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-6 shadow-2xl"
+            >
+              <button 
+                onClick={() => setEditingUser(null)}
+                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-white/[0.05] rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-cyan-500" />
+                Allocate Section
+              </h2>
+
+              <p className="text-sm text-gray-400 mb-6">
+                Assigning department and section for: <span className="text-white font-medium">{editingUser.displayName}</span>
+              </p>
+
+              <form onSubmit={handleEditUser} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CSE"
+                      value={editDept}
+                      onChange={(e) => setEditDept(e.target.value)}
+                      className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-cyan-500/30 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. A"
+                      value={editSection}
+                      onChange={(e) => setEditSection(e.target.value)}
+                      className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-cyan-500/30 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/[0.06] mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="px-5 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-white/[0.03] rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 text-sm font-semibold bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-colors shadow-lg shadow-cyan-500/20"
+                  >
+                    Save Allocation
                   </button>
                 </div>
               </form>

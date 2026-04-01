@@ -1,0 +1,36 @@
+CampusCore Predefined Credentials
+=================================
+
+ADMIN ACCOUNT:
+Email: admin2@campuscore.com
+Password: password123
+Name: Super Admin
+Role: admin
+
+PROFESSOR ACCOUNTS:
+1. Prof. John Smith
+   Email: prof.smith@campuscore.com
+   Password: password123
+   Role: professor
+
+2. Prof. Jane Doe
+   Email: prof.doe@campuscore.com
+   Password: password123
+   Role: professor
+
+3. Prof. Robert Adams
+   Email: prof.adams@campuscore.com
+   Password: password123
+   Role: professor
+
+4. Prof. Sarah Clark
+   Email: prof.clark@campuscore.com
+   Password: password123
+   Role: professor
+
+5. Prof. Michael Evans
+   Email: prof.evans@campuscore.com
+   Password: password123
+   Role: professor
+
+Note: All accounts use 'password123' as the default password.
