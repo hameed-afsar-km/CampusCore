@@ -7,7 +7,7 @@ import { useFirestore } from "@/lib/use-firestore";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { storage, db } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, uploadBytes } from "firebase/storage";
 import { format } from "date-fns";
 import {
   Trophy,
@@ -36,6 +36,8 @@ import {
   Trash2,
   Edit2,
   Loader2,
+  FileText,
+  Image as ImageIcon
 } from "lucide-react";
 import { CustomSelect } from "@/components/ui/custom-select";
 
@@ -56,6 +58,9 @@ interface AcadEvent {
   status: EventStatus;
   proofUrl?: string;
   proofName?: string;
+  thumbnailUrl?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
 }
 
 const CATEGORY_ICONS: Record<EventCategory, React.ReactNode> = {
@@ -99,6 +104,9 @@ const defaultForm = {
   location: "",
   organizer: "",
   link: "",
+  thumbnailUrl: "",
+  attachmentUrl: "",
+  attachmentName: "",
 };
 
 export default function EventsPage() {
@@ -122,6 +130,9 @@ export default function EventsPage() {
   const [form, setForm] = useState(defaultForm);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string, isCampus: boolean } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const getCategoryColor = (category: EventCategory) => {
     switch (category) {
@@ -171,6 +182,8 @@ export default function EventsPage() {
       ...defaultForm,
       category: isAdminOrProfessor ? "Technical" : "Hackathon"
     });
+    setThumbnailFile(null);
+    setAttachmentFile(null);
     setShowModal(true);
   };
 
@@ -185,38 +198,72 @@ export default function EventsPage() {
       location: event.location,
       organizer: event.organizer,
       link: event.link || "",
+      thumbnailUrl: event.thumbnailUrl || "",
+      attachmentUrl: event.attachmentUrl || "",
+      attachmentName: event.attachmentName || "",
     });
+    setThumbnailFile(null);
+    setAttachmentFile(null);
     setShowModal(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim() || !form.organizer.trim() || !form.date) return;
+    setIsUploading(true);
 
-    if (isAdminOrProfessor && isEditingCampus) {
-      if (editingId) {
-        await updateDoc(doc(db, "college_events", editingId), { ...form });
-      } else {
-        await addDoc(collection(db, "college_events"), {
-          ...form,
-          source: "campus",
-          status: "upcoming",
-          createdAt: serverTimestamp(),
-        });
+    try {
+      let thumbUrl = form.thumbnailUrl;
+      let attUrl = form.attachmentUrl;
+      let attName = form.attachmentName;
+
+      if (thumbnailFile) {
+        const tRef = ref(storage, `event_thumbnails/${Date.now()}_${thumbnailFile.name}`);
+        await uploadBytes(tRef, thumbnailFile);
+        thumbUrl = await getDownloadURL(tRef);
       }
-    } else {
-      if (editingId) {
-        await updateUserEvent(editingId, { ...form });
-      } else {
-        await addUserEvent({
-          ...form,
-          source: "user",
-          status: "upcoming",
-        });
+
+      if (attachmentFile) {
+        const aRef = ref(storage, `event_attachments/${Date.now()}_${attachmentFile.name}`);
+        await uploadBytes(aRef, attachmentFile);
+        attUrl = await getDownloadURL(aRef);
+        attName = attachmentFile.name;
       }
+
+      const payload = { ...form, thumbnailUrl: thumbUrl, attachmentUrl: attUrl, attachmentName: attName };
+
+      if (isAdminOrProfessor && isEditingCampus) {
+        if (editingId) {
+          await updateDoc(doc(db, "college_events", editingId), payload);
+        } else {
+          await addDoc(collection(db, "college_events"), {
+            ...payload,
+            source: "campus",
+            status: "upcoming",
+            createdAt: serverTimestamp(),
+          });
+        }
+      } else {
+        if (editingId) {
+          await updateUserEvent(editingId, payload);
+        } else {
+          await addUserEvent({
+            ...payload,
+            source: "user",
+            status: "upcoming",
+          });
+        }
+      }
+      setForm(defaultForm);
+      setThumbnailFile(null);
+      setAttachmentFile(null);
+      setShowModal(false);
+    } catch (err) {
+      console.error("Failed to save event:", err);
+      alert("Failed to upload files or save the event.");
+    } finally {
+      setIsUploading(false);
     }
-    setForm(defaultForm);
-    setShowModal(false);
   };
 
   const performDelete = async () => {
@@ -322,15 +369,18 @@ export default function EventsPage() {
               key={event.id}
               className="dash-card group relative p-0 overflow-hidden flex flex-col hover:border-purple-500/30 transition-all"
             >
-              <div className={`h-36 flex flex-col items-center justify-center relative ${
-                event.source === "campus"
+              <div className={`h-36 flex flex-col items-center justify-center relative bg-cover bg-center ${
+                !event.thumbnailUrl ? (event.source === "campus"
                   ? "bg-gradient-to-br from-purple-500/10 to-cyan-500/10"
-                  : "bg-gradient-to-br from-blue-500/10 to-pink-500/10"
-              } border-b border-white/[0.06]`}>
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-2 ${getCategoryColor(event.category)}`}>
+                  : "bg-gradient-to-br from-blue-500/10 to-pink-500/10") : ""
+              } border-b border-white/[0.06]`}
+                style={event.thumbnailUrl ? { backgroundImage: `url(${event.thumbnailUrl})` } : {}}
+              >
+                {event.thumbnailUrl && <div className="absolute inset-0 bg-black/60" />}
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-2 z-10 ${getCategoryColor(event.category)}`}>
                   {CATEGORY_ICONS[event.category] ?? <Trophy className="w-5 h-5" />}
                 </div>
-                <span className="text-white/30 font-semibold tracking-wider uppercase text-xs">{event.source === "campus" ? "Campus Event" : "My Event"}</span>
+                <span className="text-white/30 font-semibold tracking-wider uppercase text-xs z-10">{event.source === "campus" ? "Campus Event" : "My Event"}</span>
 
                 {event.status !== "upcoming" && (
                   <div className={`absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -365,6 +415,11 @@ export default function EventsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-400"><MapPin className="w-3.5 h-3.5 text-cyan-400" /> {event.location}</div>
                   <div className="flex items-center gap-2 text-xs text-gray-400"><Users className="w-3.5 h-3.5 text-emerald-400" /> By {event.organizer}</div>
+                  {event.attachmentUrl && (
+                    <a href={event.attachmentUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 w-fit px-2 py-1 rounded-md mt-1">
+                      <FileText className="w-3.5 h-3.5" /> <span className="truncate max-w-[150px]">{event.attachmentName || "View Attachment"}</span>
+                    </a>
+                  )}
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
@@ -467,9 +522,33 @@ export default function EventsPage() {
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Event Link (Optional)</label>
                   <input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://..." type="url" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                 </div>
+                
+                {/* Thumbnails & Attachments inputs */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Thumbnail Image</label>
+                    <label className="flex items-center justify-center w-full bg-white/[0.03] border border-white/[0.08] hover:border-purple-500/50 rounded-xl py-2.5 px-3 text-sm text-gray-400 outline-none transition-all cursor-pointer">
+                      <ImageIcon className="w-4 h-4 mr-2" />
+                      <span className="truncate">{thumbnailFile ? thumbnailFile.name : (form.thumbnailUrl ? "Change Image" : "Upload Image")}</span>
+                      <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files?.[0] || null)} className="hidden" />
+                    </label>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Attachment</label>
+                    <label className="flex items-center justify-center w-full bg-white/[0.03] border border-white/[0.08] hover:border-purple-500/50 rounded-xl py-2.5 px-3 text-sm text-gray-400 outline-none transition-all cursor-pointer">
+                      <FileText className="w-4 h-4 mr-2" />
+                      <span className="truncate">{attachmentFile ? attachmentFile.name : (form.attachmentUrl ? "Change File" : "Upload File")}</span>
+                      <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] transition-all">Cancel</button>
-                  <button type="submit" className="flex-1 btn-primary">{editingId ? "Save Changes" : "Add Event"}</button>
+                  <button type="submit" disabled={isUploading} className="flex-1 btn-primary disabled:opacity-50 flex items-center justify-center gap-2">
+                    {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isUploading ? "Saving..." : (editingId ? "Save Changes" : "Add Event")}
+                  </button>
                 </div>
               </form>
             </motion.div>
