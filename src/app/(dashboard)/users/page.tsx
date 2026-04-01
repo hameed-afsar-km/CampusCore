@@ -24,6 +24,7 @@ export default function UsersPage() {
   const [role, setRole] = useState<UserRole>("student");
   const [department, setDepartment] = useState("");
   const [section, setSection] = useState("");
+  const [staffId, setStaffId] = useState("");
   const [error, setError] = useState("");
 
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -54,12 +55,12 @@ export default function UsersPage() {
     
     try {
       if (adminCreateUser) {
-        await adminCreateUser(email, password, name, role, department, section);
+        await adminCreateUser(email, password, name, role, department, section, staffId);
       } else {
         throw new Error("Action not available.");
       }
       setShowModal(false);
-      setName(""); setEmail(""); setPassword(""); setRole("student"); setDepartment(""); setSection("");
+      setName(""); setEmail(""); setPassword(""); setRole("student"); setDepartment(""); setSection(""); setStaffId("");
     } catch (err: any) {
       setError(err.message || "Failed to create user.");
     } finally {
@@ -158,6 +159,13 @@ export default function UsersPage() {
                             </span>
                             <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">
                               {user.section || "No Section"}
+                            </span>
+                          </div>
+                        )}
+                        {user.role === "professor" && user.staffId && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">
+                              ID: {user.staffId}
                             </span>
                           </div>
                         )}
@@ -307,6 +315,19 @@ export default function UsersPage() {
                         className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
                       />
                     </div>
+                  </div>
+                )}
+                
+                {role === "professor" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">Staff ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. FAC-1049"
+                      value={staffId}
+                      onChange={(e) => setStaffId(e.target.value)}
+                      className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
+                    />
                   </div>
                 )}
 

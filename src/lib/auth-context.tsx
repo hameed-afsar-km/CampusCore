@@ -29,6 +29,7 @@ export interface UserData {
   role: UserRole;
   department?: string;
   section?: string;
+  staffId?: string;
   photoURL?: string;
   createdAt?: Date;
 }
@@ -52,7 +53,8 @@ interface AuthContextType {
     name: string,
     role: UserRole,
     department?: string,
-    section?: string
+    section?: string,
+    staffId?: string
   ) => Promise<void>;
   signInGoogle: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
@@ -149,7 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name: string,
     role: UserRole,
     department?: string,
-    section?: string
+    section?: string,
+    staffId?: string
   ) => {
     if (!secondaryAuth) throw new Error("Secondary auth not initialized.");
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
@@ -165,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     if (department) userDataObj.department = department;
     if (section) userDataObj.section = section;
+    if (staffId) userDataObj.staffId = staffId;
 
     await setDoc(doc(db, "users", cred.user.uid), userDataObj);
 

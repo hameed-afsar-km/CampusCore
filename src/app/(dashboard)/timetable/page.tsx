@@ -59,7 +59,6 @@ export default function TimetablePage() {
   const isProfessor = userData?.role === "professor";
   const isStudent = userData?.role === "student";
 
-  const [activeTab, setActiveTab] = useState<"grid" | "subjects">("grid");
   const [viewMode, setViewMode] = useState<"class"|"faculty">("class");
   const [viewDept, setViewDept] = useState(userData?.department || "CSE");
   const [viewSection, setViewSection] = useState(userData?.section || "A");
@@ -200,14 +199,10 @@ export default function TimetablePage() {
         </div>
       )}
 
-      {/* TABS */}
-      <div className="flex gap-4 border-b border-white/[0.06] pb-2">
-        <button onClick={() => setActiveTab("grid")} className={`pb-2 text-sm font-bold tracking-wider uppercase border-b-2 transition-colors ${activeTab === 'grid' ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>Grid Layout</button>
-        <button onClick={() => setActiveTab("subjects")} className={`pb-2 text-sm font-bold tracking-wider uppercase border-b-2 transition-colors ${activeTab === 'subjects' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>Subjects & Details</button>
-      </div>
+      {/* TABS REMOVED */}
 
-      {activeTab === "grid" && (
-        <div className="dash-card overflow-hidden !p-0">
+      {/* Grid Layout Section */}
+      <div className="dash-card overflow-hidden !p-0 mb-8">
           <div className="p-4 border-b border-white/[0.06] flex justify-between items-center bg-white/[0.01]">
             <h3 className="font-bold text-gray-200">Schedule Grid</h3>
             {(isAdmin || isProfessor) && viewMode === "class" && canEdit(viewDept, viewSection) && (
@@ -237,36 +232,36 @@ export default function TimetablePage() {
                       <tr key={day}>
                         <td className="px-2 py-3 font-bold text-gray-300 border-r border-white/[0.06] bg-[#05070a]/50 text-[10px] uppercase text-center">{day.substring(0,3)}</td>
                         {TIME_SLOTS.map(slot => {
-                          if (day === "Friday" && slot.id === "lunch") return <td key={slot.id} colSpan={2} className="border-r border-white/[0.06] bg-emerald-500/10 text-center"><span className="text-[10px] font-bold text-emerald-500/80 tracking-widest">JUMMAH</span></td>;
+                          if (day === "Friday" && slot.id === "lunch") return <td key={slot.id} colSpan={2} className="border-r border-white/[0.06] bg-emerald-500/10 text-center align-middle"><span className="text-xs font-bold text-emerald-500/80 tracking-widest">JUMMAH PRAYER</span></td>;
                           if (day === "Friday" && slot.id === "5") return null;
-                          if (slot.type === "break") return <td key={slot.id} className="border-r border-white/[0.06] bg-amber-500/5"><div className="text-[8px] text-amber-500/50 font-bold tracking-[0.2em] transform -rotate-90 text-center">BRK</div></td>;
-                          if (slot.type === "lunch" && day !== "Friday") return <td key={slot.id} className="border-r border-white/[0.06] bg-blue-500/5"><div className="text-[8px] text-blue-500/50 font-bold tracking-[0.2em] transform -rotate-90 text-center">LUN</div></td>;
+                          if (slot.type === "break") return <td key={slot.id} className="border-r border-white/[0.06] bg-amber-500/5 text-center p-2"><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }} className="text-[10px] text-amber-500/50 font-bold tracking-[0.3em] inline-block">BREAK</div></td>;
+                          if (slot.type === "lunch" && day !== "Friday") return <td key={slot.id} className="border-r border-white/[0.06] bg-blue-500/5 text-center p-2"><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }} className="text-[10px] text-blue-500/50 font-bold tracking-[0.3em] inline-block">LUNCH</div></td>;
 
                           const slotClasses = dayClasses.filter((c: any) => `${c.timeStart} - ${c.timeEnd}` === slot.label);
                           
                           return (
-                            <td key={slot.id} className="p-1 border-r border-white/[0.06] relative group align-top h-[70px]">
+                            <td key={slot.id} className="p-1 border-r border-white/[0.06] relative group align-top min-h-[110px]">
                               {slotClasses.length > 0 ? (
-                                <div className="flex flex-col gap-1 h-full">
+                                <div className="flex flex-col gap-1 h-full min-h-[100px]">
                                   {slotClasses.map((c: any) => {
                                     const editable = canEdit(c.department || "", c.section || "");
                                     
                                     return (
-                                      <div key={c.id} className="relative bg-[#0d121c] rounded-md p-1.5 border border-white/[0.04] hover:border-purple-500/30 transition-colors shadow-sm min-h-full">
-                                        <div className="font-bold text-purple-400 text-[11px] leading-none mb-1 max-w-[65px] truncate" title={c.subjectName}>{c.subjectCode || "Unk"}</div>
+                                      <div key={c.id} className="relative bg-[#0d121c] rounded-md p-2 border border-white/[0.04] hover:border-purple-500/30 transition-colors shadow-sm flex flex-col min-h-full">
+                                        <div className="font-bold text-purple-400 text-xs leading-none mb-1 max-w-[85px] truncate" title={c.subjectName}>{c.subjectCode || "Unk"}</div>
                                         
                                         {!isStudent && editable && (
                                           <div className="absolute top-1 right-1 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 bg-black/60 rounded p-0.5">
-                                            <button onClick={() => setConfirmDelete({ id: c.id!, type: "class" })} className="p-0.5 text-gray-400 hover:text-red-400"><Trash2 className="w-2.5 h-2.5" /></button>
+                                            <button onClick={() => setConfirmDelete({ id: c.id!, type: "class" })} className="p-0.5 text-gray-400 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
                                           </div>
                                         )}
                                         
                                         {viewMode === "class" ? (
-                                          <div className="text-[9px] text-gray-500 truncate mt-0.5">{c.facultyName ? c.facultyName.split(" ")[0] : "TBA"}</div>
+                                          <div className="text-[10px] text-gray-400 truncate mt-1">{c.facultyName ? c.facultyName.split(" ")[0] : "TBA"}</div>
                                         ) : (
-                                          <div className="text-[9px] text-gray-500 truncate mt-0.5">{c.department}-{c.section}</div>
+                                          <div className="text-[10px] text-gray-400 truncate mt-1">{c.department}-{c.section}</div>
                                         )}
-                                        <div className="text-[9px] text-gray-600 truncate mt-0.5">{c.room}</div>
+                                        <div className="text-[10px] text-gray-500 truncate mt-0.5">{c.room}</div>
                                       </div>
                                     )
                                   })}
@@ -283,9 +278,8 @@ export default function TimetablePage() {
             </table>
           </div>
         </div>
-      )}
 
-      {activeTab === "subjects" && (
+      {/* Subjects Section */}
         <div className="dash-card overflow-hidden !p-0">
           <div className="p-4 border-b border-white/[0.06] flex justify-between items-center bg-white/[0.01]">
             <h3 className="font-bold text-gray-200">Enrolled Subjects</h3>
@@ -331,7 +325,6 @@ export default function TimetablePage() {
             </table>
           </div>
         </div>
-      )}
 
       {/* Class Modal */}
       <AnimatePresence>
