@@ -35,6 +35,7 @@ interface Assignment {
   type: AssignmentType;
   description?: string;
   userId?: string;
+  classId?: string;   // FK → classes
 }
 
 const defaultForm = {
@@ -103,14 +104,12 @@ export default function AssignmentsPage() {
     if (!form.title.trim() || !form.subject.trim() || !form.dueDate) return;
 
     if (editingId) {
-      await update(editingId, {
-        ...form,
-      });
+      await update(editingId, { ...form });
     } else {
-      await add({
-        ...form,
-        status: "pending",
-      });
+      const payload: any = { ...form, status: "pending" };
+      // Tag with classId if user has one (student/professor)
+      if ((user as any)?.classId) payload.classId = (user as any).classId;
+      await add(payload);
     }
     setShowModal(false);
   };

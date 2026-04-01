@@ -27,8 +27,13 @@ export interface UserData {
   email: string;
   displayName: string;
   role: UserRole;
+  // Class-linked fields (students)
+  classId?: string;     // FK → classes/{classId}
   department?: string;
   section?: string;
+  year?: number;
+  semester?: number;
+  // Professor-specific
   staffId?: string;
   photoURL?: string;
   createdAt?: Date;

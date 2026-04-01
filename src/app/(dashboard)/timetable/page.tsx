@@ -16,6 +16,8 @@ const DAYS: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday
 interface TimetableClass {
   id?: string;
   day: DayOfWeek;
+  classId: string;      // FK → classes
+  subjectId: string;    // FK → subjects
   subjectCode: string;
   subjectName: string;
   facultyId: string;
@@ -29,6 +31,7 @@ interface TimetableClass {
 
 interface Subject {
   id?: string;
+  classId?: string;     // FK → classes
   department: string;
   section: string;
   code: string;
@@ -52,11 +55,13 @@ const TIME_SLOTS = [
 
 export default function TimetablePage() {
   const { user, userData } = useAuth();
-  const { data: allClasses, add, update, remove, loading } = useFirestore<TimetableClass>("timetable", false);
+  const { data: allTimetable, add, update, remove, loading } = useFirestore<TimetableClass>("timetable", false);
   const { data: allSubjects, add: addSubject, update: updateSubject, remove: removeSubject } = useFirestore<Subject>("subjects", false);
   const { data: usersList } = useFirestore<any>("users", false);
+  const { data: classDocsList } = useFirestore<any>("classes", false);
   
   const professors = useMemo(() => usersList.filter((u: any) => u.role === "professor"), [usersList]);
+  const activeClassDocs = useMemo(() => classDocsList.filter((c: any) => c.isActive !== false), [classDocsList]);
 
   const isAdmin = userData?.role === "admin";
   const isProfessor = userData?.role === "professor";
@@ -65,6 +70,7 @@ export default function TimetablePage() {
   const [viewMode, setViewMode] = useState<"class"|"faculty">("class");
   const [viewDept, setViewDept] = useState(userData?.department || "CSE");
   const [viewSection, setViewSection] = useState(userData?.section || "A");
+  const [viewClassId, setViewClassId] = useState(userData?.classId || "");
   const [viewFacultyId, setViewFacultyId] = useState(isProfessor ? userData?.uid : "");
 
   const [showSubjectModal, setShowSubjectModal] = useState(false);
@@ -73,28 +79,42 @@ export default function TimetablePage() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string, type: "class" | "subject" } | null>(null);
   
   const [subjectForm, setSubjectForm] = useState<Subject>({
-    department: viewDept, section: viewSection, code: "", name: "", credits: 3, facultyId: "", facultyName: ""
+    classId: "", department: viewDept, section: viewSection, code: "", name: "", credits: 3, facultyId: "", facultyName: ""
   });
 
   const [classForm, setClassForm] = useState({
     day: "Monday" as DayOfWeek, periodId: "1", room: "", subjectId: "", department: viewDept, section: viewSection
   });
 
+  // Filter subjects: by classId (preferred) or dept+section fallback
   const filteredSubjects = useMemo(() => {
-    return allSubjects.filter(s => s.department?.toLowerCase() === viewDept.toLowerCase() && s.section?.toLowerCase() === viewSection.toLowerCase());
-  }, [allSubjects, viewDept, viewSection]);
+    if (viewClassId) return allSubjects.filter(s => s.classId === viewClassId);
+    return allSubjects.filter(s =>
+      s.department?.toLowerCase() === viewDept.toLowerCase() &&
+      s.section?.toLowerCase() === viewSection.toLowerCase()
+    );
+  }, [allSubjects, viewDept, viewSection, viewClassId]);
 
   const filteredClasses = useMemo(() => {
-    if (isStudent || viewMode === "class") {
-      const d = isStudent ? userData?.department : viewDept;
-      const s = isStudent ? userData?.section : viewSection;
-      if (!d || !s) return [];
-      return allClasses.filter((c: any) => c.department?.toLowerCase() === d.toLowerCase() && c.section?.toLowerCase() === s.toLowerCase());
-    } else {
+    if (viewMode === "faculty") {
       if (!viewFacultyId) return [];
-      return allClasses.filter((c: any) => c.facultyId === viewFacultyId);
+      return allTimetable.filter((c: any) => c.facultyId === viewFacultyId);
     }
-  }, [allClasses, isStudent, userData, viewMode, viewDept, viewSection, viewFacultyId]);
+    // Class view — student uses their classId, others use dept+section
+    if (isStudent) {
+      const d = userData?.department;
+      const s = userData?.section;
+      if (!d || !s) return [];
+      return allTimetable.filter((c: any) =>
+        c.department?.toLowerCase() === d.toLowerCase() &&
+        c.section?.toLowerCase() === s.toLowerCase()
+      );
+    }
+    return allTimetable.filter((c: any) =>
+      c.department?.toLowerCase() === viewDept.toLowerCase() &&
+      c.section?.toLowerCase() === viewSection.toLowerCase()
+    );
+  }, [allTimetable, isStudent, userData, viewMode, viewDept, viewSection, viewFacultyId]);
 
   const groupedClasses = useMemo(() => {
     const grouped = {} as Record<DayOfWeek, TimetableClass[]>;
@@ -119,11 +139,13 @@ export default function TimetablePage() {
       const p = professors.find((p: any) => p.uid === subjectForm.facultyId);
       if (p) fName = p.displayName;
     }
-    const payload = { ...subjectForm, facultyName: fName };
-
+    // Resolve classId from selected class if not already set
+    let resolvedClassId = subjectForm.classId || "";
+    if (!resolvedClassId && viewClassId) resolvedClassId = viewClassId;
+    
+    const payload = { ...subjectForm, facultyName: fName, classId: resolvedClassId };
     if (editingId) await updateSubject(editingId, payload);
     else await addSubject(payload);
-    
     setShowSubjectModal(false);
   };
 
@@ -139,6 +161,8 @@ export default function TimetablePage() {
       timeStart: start, timeEnd: end,
       room: classForm.room,
       department: classForm.department, section: classForm.section,
+      classId: sub.classId || "",      // Link to class entity
+      subjectId: sub.id || "",          // Link to subject entity
       subjectCode: sub.code, subjectName: sub.name,
       facultyId: sub.facultyId, facultyName: sub.facultyName 
     };
@@ -365,12 +389,33 @@ export default function TimetablePage() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-sm bg-[#0a0e17] border border-white/[0.08] rounded-2xl p-5 shadow-2xl">
               <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-white">Add Subject</h3><button onClick={() => setShowSubjectModal(false)}><X className="w-4 h-4 text-gray-400"/></button></div>
               <form onSubmit={handleSaveSubject} className="space-y-3">
+                 {/* Class selector - links subject to a Class entity */}
+                 <select
+                   value={subjectForm.classId || ""}
+                   onChange={e => {
+                     const cls = activeClassDocs.find((c: any) => c.id === e.target.value);
+                     setSubjectForm({
+                       ...subjectForm,
+                       classId: e.target.value,
+                       department: cls?.department || subjectForm.department,
+                       section: cls?.section || subjectForm.section,
+                     });
+                   }}
+                   className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-cyan-500 rounded-lg p-2.5 text-sm outline-none transition-colors"
+                 >
+                   <option value="" className="bg-[#0a0e17]">Link to Class (optional)</option>
+                   {activeClassDocs.map((c: any) => (
+                     <option key={c.id} value={c.id} className="bg-[#0a0e17]">
+                       {c.department}-{c.section} | Sem {c.semester} | {c.academicYear}
+                     </option>
+                   ))}
+                 </select>
                  <input required type="text" placeholder="Code (e.g. CSD2202)" value={subjectForm.code} onChange={e => setSubjectForm({ ...subjectForm, code: e.target.value.toUpperCase() })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500 rounded-lg p-2.5 text-sm outline-none uppercase transition-colors" />
                  <input required type="text" placeholder="Subject Title" value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500 rounded-lg p-2.5 text-sm outline-none transition-colors" />
                  <input required type="number" min={1} max={10} placeholder="Credits" value={subjectForm.credits} onChange={e => setSubjectForm({ ...subjectForm, credits: parseInt(e.target.value) || 0 })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500 rounded-lg p-2.5 text-sm outline-none transition-colors" />
                  <select required value={subjectForm.facultyId} onChange={e => setSubjectForm({ ...subjectForm, facultyId: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500 rounded-lg p-2.5 text-sm outline-none transition-colors">
                     <option value="" className="bg-[#0a0e17]">Assign Faculty...</option>
-                    {professors.map((p: any) => <option key={p.uid} value={p.uid} className="bg-[#0a0e17]">{p.displayName}</option>)}
+                    {professors.map((p: any) => <option key={p.uid} value={p.uid} className="bg-[#0a0e17]">{p.displayName}{p.staffId ? ` (${p.staffId})` : ""}</option>)}
                  </select>
                  <button type="submit" className="w-full btn-primary py-2.5 text-sm mt-3">Create Subject</button>
               </form>

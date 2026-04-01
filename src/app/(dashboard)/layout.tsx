@@ -22,6 +22,7 @@ import {
   X,
   Settings,
   CheckCircle2,
+  GraduationCap,
 } from "lucide-react";
 import { useAuth, UserRole } from "@/lib/auth-context";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
@@ -39,6 +40,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
   { label: "Academics", href: "/academics", icon: <BookOpen className="w-5 h-5" />, roles: ["professor", "student"] },
+  { label: "Classes", href: "/classes", icon: <GraduationCap className="w-5 h-5" />, roles: ["admin"] },
   { label: "Schedules", href: "/schedules", icon: <Calendar className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
   { label: "Campus Life", href: "/campus", icon: <Bell className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
   { label: "Community", href: "/community", icon: <Users className="w-5 h-5" />, roles: ["admin", "professor", "student"] },
