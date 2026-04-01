@@ -36,6 +36,9 @@ export default function UsersPage() {
   const [editClassId, setEditClassId] = useState("");
   const [editDept, setEditDept] = useState("");
   const [editSection, setEditSection] = useState("");
+  const [isAdvisor, setIsAdvisor] = useState(false);
+  const [advisorClassId, setAdvisorClassId] = useState("");
+  const [assignedSubjectIds, setAssignedSubjectIds] = useState<string[]>([]);
 
   const activeClasses = useMemo(() => classes.filter((c: any) => c.isActive !== false), [classes]);
 
@@ -85,7 +88,13 @@ export default function UsersPage() {
     if (!editingUser) return;
     try {
       const selectedClass = classes.find((c: any) => c.id === editClassId);
-      const updatePayload: any = { department: editDept, section: editSection };
+      const updatePayload: any = { 
+        department: editDept, 
+        section: editSection,
+        isAdvisor: isAdvisor,
+        advisorClassId: isAdvisor ? advisorClassId : null,
+        assignedSubjectIds: assignedSubjectIds
+      };
       if (editingUser.role === "student") {
         updatePayload.classId = editClassId || null;
         if (selectedClass) {
@@ -152,13 +161,18 @@ export default function UsersPage() {
                   <tr key={user.uid} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                          user.role === 'admin' ? "bg-red-500/20 text-red-400" :
-                          user.role === 'professor' ? "bg-purple-500/20 text-purple-400" :
-                          "bg-cyan-500/20 text-cyan-400"
+                        <div className="flex items-center gap-1 mt-1">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                          user.role === 'admin' ? 'bg-red-500/20 text-red-400' : 
+                          user.role === 'professor' ? 'bg-purple-500/20 text-purple-400' : 
+                          'bg-blue-500/20 text-blue-400'
                         }`}>
-                          {(user.displayName || "U")[0]}
-                        </div>
+                          {user.role}
+                        </span>
+                        {user.role === 'professor' && user.isAdvisor && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">Advisor</span>
+                        )}
+                      </div>
                         <span className="font-medium text-gray-200">{user.displayName}</span>
                       </div>
                     </td>
@@ -204,6 +218,9 @@ export default function UsersPage() {
                                 setEditClassId(user.classId || "");
                                 setEditDept(user.department || DEPARTMENTS[0]);
                                 setEditSection(user.section || SECTIONS[0]);
+                                setIsAdvisor(user.isAdvisor || false);
+                                setAdvisorClassId(user.advisorClassId || "");
+                                setAssignedSubjectIds(user.assignedSubjectIds || []);
                               }}
                               className="p-2 text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
                               title="Edit Allocation"
@@ -331,20 +348,44 @@ export default function UsersPage() {
                     <p className="text-xs text-gray-500 mt-1.5">Selecting a class auto-fills Department, Section, Year, and Semester from the class definition.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
-                      <select value={editDept} onChange={e => setEditDept(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
-                        {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
+                        <select value={editDept} onChange={e => setEditDept(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
+                          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
+                        <select value={editSection} onChange={e => setEditSection(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
+                          {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
-                      <select value={editSection} onChange={e => setEditSection(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
-                        {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+
+                    <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-sm font-bold text-gray-200">Class Advisor</label>
+                          <p className="text-xs text-gray-500">Designate as current class lead</p>
+                        </div>
+                        <input type="checkbox" checked={isAdvisor} onChange={e => setIsAdvisor(e.target.checked)} className="w-5 h-5 rounded accent-cyan-500" />
+                      </div>
+                      
+                      {isAdvisor && (
+                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Advisor for Class</label>
+                          <select value={advisorClassId} onChange={e => setAdvisorClassId(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2 px-3 text-xs outline-none transition-all text-white">
+                            <option value="">Select Class...</option>
+                            {activeClasses.map((c: any) => (
+                              <option key={c.id} value={c.id}>{c.department} — {c.section} | Sem {c.semester}</option>
+                            ))}
+                          </select>
+                        </motion.div>
+                      )}
                     </div>
-                  </div>
+                  </>
                 )}
 
                 <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/[0.06] mt-6">

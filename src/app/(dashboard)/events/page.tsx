@@ -309,12 +309,23 @@ export default function EventsPage() {
 
   const performDelete = async () => {
     if (!confirmDelete) return;
-    if (confirmDelete.isCampus && isAdminOrProfessor) {
-      await deleteDoc(doc(db, "college_events", confirmDelete.id));
-    } else {
-      await removeUserEvent(confirmDelete.id);
+    try {
+      if (confirmDelete.isCampus) {
+        if (!isAdminOrProfessor) {
+          alert("Only admins can delete campus events.");
+          setConfirmDelete(null);
+          return;
+        }
+        await deleteDoc(doc(db, "college_events", confirmDelete.id));
+      } else {
+        await removeUserEvent(confirmDelete.id);
+      }
+      setConfirmDelete(null);
+    } catch (err: any) {
+      console.error("Delete failed:", err);
+      alert("Failed to delete event: " + (err.message || "Unknown error"));
+      setConfirmDelete(null);
     }
-    setConfirmDelete(null);
   };
 
   const handleProofUpload = async (eventId: string, file: File) => {
