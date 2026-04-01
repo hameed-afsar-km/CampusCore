@@ -51,6 +51,7 @@ interface AcadEvent {
   description: string;
   category: EventCategory;
   date: string;
+  registrationDeadline?: string;
   location: string;
   organizer: string;
   link?: string;
@@ -61,6 +62,9 @@ interface AcadEvent {
   thumbnailUrl?: string;
   attachmentUrl?: string;
   attachmentName?: string;
+  registrationProofUrl?: string;
+  registrationProofName?: string;
+  campusEventId?: string;
 }
 
 const CATEGORY_ICONS: Record<EventCategory, React.ReactNode> = {
@@ -83,10 +87,11 @@ const CAMPUS_CATEGORIES: EventCategory[] = [
   "Technical", "Cultural", "Sports", "Workshop", "Other"
 ];
 
-type TabKey = "all" | "campus" | "user" | "registered" | "ongoing" | "completed" | "won" | "history";
+type TabKey = "all" | "upcoming" | "campus" | "user" | "registered" | "ongoing" | "completed" | "won" | "history";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "all", label: "All Events", icon: <Globe className="w-3.5 h-3.5" /> },
+  { key: "upcoming", label: "Registrations Open", icon: <CalendarDays className="w-3.5 h-3.5" /> },
   { key: "campus", label: "Campus", icon: <Trophy className="w-3.5 h-3.5" /> },
   { key: "user", label: "Other Events", icon: <Users className="w-3.5 h-3.5" /> },
   { key: "registered", label: "Registered", icon: <ListChecks className="w-3.5 h-3.5" /> },
@@ -101,6 +106,7 @@ const defaultForm = {
   description: "",
   category: "Hackathon" as EventCategory,
   date: "",
+  registrationDeadline: "",
   location: "",
   organizer: "",
   link: "",
@@ -118,10 +124,6 @@ export default function EventsPage() {
   
   const loading = loadingUser || loadingCampus;
 
-  const events = useMemo(() => {
-    return [...userEvents, ...campusEvents];
-  }, [userEvents, campusEvents]);
-
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [showModal, setShowModal] = useState(false);
@@ -133,6 +135,16 @@ export default function EventsPage() {
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  const [registerEventTarget, setRegisterEventTarget] = useState<AcadEvent | null>(null);
+  const [registerProofFile, setRegisterProofFile] = useState<File | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  const events = useMemo(() => {
+    const registeredCampusIds = userEvents.map(e => e.campusEventId).filter(Boolean);
+    const displayedCampusEvents = campusEvents.filter(ce => !registeredCampusIds.includes(ce.id));
+    return [...userEvents, ...displayedCampusEvents];
+  }, [userEvents, campusEvents]);
 
   const getCategoryColor = (category: EventCategory) => {
     switch (category) {
@@ -151,6 +163,11 @@ export default function EventsPage() {
       e.category.toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
     switch (activeTab) {
+      case "upcoming":
+        if (e.status !== "upcoming") return false;
+        if (!e.registrationDeadline) return true;
+        const dl = new Date(e.registrationDeadline + "T23:59:59");
+        return new Date() <= dl;
       case "campus": return e.source === "campus";
       case "user": return e.source === "user";
       case "registered": return e.status === "registered";
@@ -162,12 +179,42 @@ export default function EventsPage() {
     }
   });
 
-  const registerEvent = async (id: string, isCampus: boolean) => {
-    if (isCampus) {
-      // For a real app, this should add a document to an 'event_registrations' collection
-      alert("Registration for Campus Events is noted.");
-    } else {
-      updateUserEvent(id, { status: "registered" });
+  const openRegisterModal = (event: AcadEvent) => {
+    setRegisterEventTarget(event);
+    setRegisterProofFile(null);
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!registerEventTarget || !registerProofFile) return;
+    setIsRegistering(true);
+
+    try {
+      const res = await uploadToCloudinary(registerProofFile);
+      const payload = {
+        status: "registered" as EventStatus,
+        registrationProofUrl: res.secure_url,
+        registrationProofName: registerProofFile.name,
+      };
+
+      if (registerEventTarget.source === "campus") {
+        const { id, ...eventWithoutId } = registerEventTarget;
+        await addUserEvent({
+          ...eventWithoutId,
+          campusEventId: registerEventTarget.id,
+          source: "user",
+          ...payload
+        });
+      } else {
+        await updateUserEvent(registerEventTarget.id, payload);
+      }
+      setRegisterEventTarget(null);
+      setRegisterProofFile(null);
+    } catch (err: any) {
+      console.error("Registration failed:", err);
+      alert("Failed to submit registration proof.");
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -195,6 +242,7 @@ export default function EventsPage() {
       description: event.description,
       category: event.category,
       date: event.date,
+      registrationDeadline: event.registrationDeadline || "",
       location: event.location,
       organizer: event.organizer,
       link: event.link || "",
@@ -394,8 +442,14 @@ export default function EventsPage() {
                 <div className="space-y-1.5 mt-auto">
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     <CalendarDays className="w-3.5 h-3.5 text-purple-400" />
-                    {event.date ? format(new Date(event.date + "T12:00:00"), "MMM d, yyyy") : "TBD"}
+                    Event: {event.date ? format(new Date(event.date + "T12:00:00"), "MMM d, yyyy") : "TBD"}
                   </div>
+                  {event.registrationDeadline && (
+                    <div className="flex items-center gap-2 text-xs text-amber-400/80">
+                      <CalendarDays className="w-3.5 h-3.5 text-amber-400" />
+                      Deadline: {format(new Date(event.registrationDeadline + "T12:00:00"), "MMM d, yyyy")}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-xs text-gray-400"><MapPin className="w-3.5 h-3.5 text-cyan-400" /> {event.location}</div>
                   <div className="flex items-center gap-2 text-xs text-gray-400"><Users className="w-3.5 h-3.5 text-emerald-400" /> By {event.organizer}</div>
                   {event.attachmentUrl && (
@@ -407,14 +461,19 @@ export default function EventsPage() {
 
                 <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
                   {event.status === "upcoming" && (
-                    <button onClick={() => registerEvent(event.id, event.source === "campus")} className="w-full text-xs font-medium px-4 py-2 rounded-xl text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-colors">Register / Join</button>
+                    <button onClick={() => openRegisterModal(event)} className="w-full text-xs font-medium px-4 py-2 rounded-xl text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-colors">Register / Upload Proof</button>
                   )}
                   {event.status === "registered" && (
-                    <div className="flex gap-2">
-                      {event.link && (
-                        <a href={event.link} target="_blank" rel="noopener noreferrer" className="flex-1 text-xs font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 px-3 py-2 rounded-xl transition-colors flex items-center gap-1 justify-center">Event Portal <ExternalLink className="w-3 h-3" /></a>
-                      )}
-                      <button onClick={() => markWon(event.id)} className="flex-1 text-xs font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 rounded-xl border border-amber-500/20 transition-colors">Mark as Won</button>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        {event.link && (
+                          <a href={event.link} target="_blank" rel="noopener noreferrer" className="flex-1 text-[11px] font-medium text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 px-2 py-2 rounded-xl transition-colors flex items-center justify-center gap-1">Portal <ExternalLink className="w-3 h-3" /></a>
+                        )}
+                        {event.registrationProofUrl && (
+                          <a href={event.registrationProofUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-2 rounded-xl transition-colors flex items-center justify-center gap-1">My Proof <FileText className="w-3 h-3" /></a>
+                        )}
+                      </div>
+                      <button onClick={() => markWon(event.id)} className="w-full text-xs font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 rounded-xl border border-amber-500/20 transition-colors">Mark as Won</button>
                     </div>
                   )}
                   {(event.status === "completed" || event.status === "won") && (
@@ -477,14 +536,18 @@ export default function EventsPage() {
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Event Title *</label>
                   <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. National Hackathon" className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-1">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Category *</label>
                     <CustomSelect value={form.category} onChange={(v) => setForm({ ...form, category: v as EventCategory })} options={USER_CATEGORIES.map((c) => ({ value: c, label: c }))} />
                   </div>
-                  <div>
+                  <div className="col-span-1">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Event Date *</label>
-                    <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-4 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]" />
+                    <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-3 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Reg. Deadline</label>
+                    <input type="date" value={form.registrationDeadline || ""} onChange={(e) => setForm({ ...form, registrationDeadline: e.target.value })} className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-purple-500/50 rounded-xl py-2.5 px-3 text-sm text-gray-200 outline-none transition-all [color-scheme:dark]" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -531,6 +594,46 @@ export default function EventsPage() {
                   <button type="submit" disabled={isUploading} className="flex-1 btn-primary disabled:opacity-50 flex items-center justify-center gap-2">
                     {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
                     {isUploading ? "Saving..." : (editingId ? "Save Changes" : "Add Event")}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Registration Proof Modal */}
+      <AnimatePresence>
+        {registerEventTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto"
+            onClick={(e) => e.target === e.currentTarget && setRegisterEventTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-sm bg-[#0a0e17] border border-white/[0.08] rounded-2xl p-6 shadow-2xl"
+            >
+              <h3 className="text-lg font-bold text-white mb-2">Complete Registration</h3>
+              <p className="text-sm text-gray-400 mb-4">You are registering for <strong>{registerEventTarget.title}</strong>. Please complete your registration via the event portal/link, then upload your proof of registration (screenshot or PDF) below.</p>
+              
+              <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                <div>
+                  <label className="flex items-center justify-center w-full bg-white/[0.03] border border-white/[0.08] hover:border-blue-500/50 rounded-xl py-3 px-3 text-sm text-blue-400/80 outline-none transition-all cursor-pointer border-dashed">
+                    <FileText className="w-4 h-4 mr-2" />
+                    <span className="truncate">{registerProofFile ? registerProofFile.name : "Select Proof File *"}</span>
+                    <input type="file" required onChange={(e) => setRegisterProofFile(e.target.files?.[0] || null)} className="hidden" />
+                  </label>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setRegisterEventTarget(null)} disabled={isRegistering} className="flex-1 py-2 rounded-xl text-sm text-gray-400 hover:text-white border border-white/[0.08] transition-all">Cancel</button>
+                  <button type="submit" disabled={isRegistering || !registerProofFile} className="flex-1 btn-primary disabled:opacity-50 flex items-center justify-center gap-2">
+                    {isRegistering ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Proof"}
                   </button>
                 </div>
               </form>
