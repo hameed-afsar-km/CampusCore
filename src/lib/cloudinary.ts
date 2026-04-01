@@ -30,7 +30,6 @@ export async function uploadToCloudinary(
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", UPLOAD_PRESET);
-  formData.append("access_mode", "public");
   
   // Optional: Folder organization
   formData.append("folder", "campuscore_uploads");
