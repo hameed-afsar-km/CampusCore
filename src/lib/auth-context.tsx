@@ -60,7 +60,7 @@ interface AuthContextType {
     department?: string,
     section?: string,
     staffId?: string
-  ) => Promise<void>;
+  ) => Promise<string>;
   signInGoogle: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     department?: string,
     section?: string,
     staffId?: string
-  ) => {
+  ): Promise<string> => {
     if (!secondaryAuth) throw new Error("Secondary auth not initialized.");
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     await updateProfile(cred.user, { displayName: name });
@@ -179,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Sign out from the secondary auth so it's clean for the next use
     await signOut(secondaryAuth);
+    return cred.user.uid;
   };
 
   const signInGoogle = async (role: UserRole) => {

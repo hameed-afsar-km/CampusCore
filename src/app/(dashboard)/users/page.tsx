@@ -29,6 +29,8 @@ export default function UsersPage() {
   const [section, setSection] = useState(SECTIONS[0]);
   const [staffId, setStaffId] = useState("");
   const [classId, setClassId] = useState("");
+  const [classAdvisorId, setClassAdvisorId] = useState("");
+  const [subjectsTaught, setSubjectsTaught] = useState("");
   const [error, setError] = useState("");
 
   // Edit form
@@ -36,9 +38,8 @@ export default function UsersPage() {
   const [editClassId, setEditClassId] = useState("");
   const [editDept, setEditDept] = useState("");
   const [editSection, setEditSection] = useState("");
-  const [isAdvisor, setIsAdvisor] = useState(false);
-  const [advisorClassId, setAdvisorClassId] = useState("");
-  const [assignedSubjectIds, setAssignedSubjectIds] = useState<string[]>([]);
+  const [editClassAdvisorId, setEditClassAdvisorId] = useState("");
+  const [editSubjectsTaught, setEditSubjectsTaught] = useState("");
 
   const activeClasses = useMemo(() => classes.filter((c: any) => c.isActive !== false), [classes]);
 
@@ -64,18 +65,26 @@ export default function UsersPage() {
     setError("");
     try {
       if (adminCreateUser) {
-        await adminCreateUser(email, password, name, role, department, section, staffId);
-        // If student, assign to selected class after creation
-        // The user doc is created by adminCreateUser, we need to update it if classId selected
-        // We'll handle classId separately via Firestore after a short wait
+        const newUid = await adminCreateUser(email, password, name, role, department, section, staffId);
+        
+        const extraPayload: any = {};
         if (role === "student" && classId) {
-          // Find the newly created user after a moment — handled by admin in edit flow if needed
-          // For now classId is applied on next edit
+          extraPayload.classId = classId;
+        }
+        if (role === "professor") {
+          if (classAdvisorId) extraPayload.classAdvisorId = classAdvisorId;
+          const subs = subjectsTaught.split(',').map(s=>s.trim()).filter(Boolean);
+          if (subs.length > 0) extraPayload.subjectsTaught = subs;
+        }
+        
+        if (Object.keys(extraPayload).length > 0) {
+          await updateDoc(doc(db, "users", newUid), extraPayload);
         }
       }
       setShowModal(false);
       setName(""); setEmail(""); setPassword(""); setRole("student");
       setDepartment(DEPARTMENTS[0]); setSection(SECTIONS[0]); setStaffId(""); setClassId("");
+      setClassAdvisorId(""); setSubjectsTaught("");
     } catch (err: any) {
       setError(err.message || "Failed to create user.");
     } finally {
@@ -88,13 +97,7 @@ export default function UsersPage() {
     if (!editingUser) return;
     try {
       const selectedClass = classes.find((c: any) => c.id === editClassId);
-      const updatePayload: any = { 
-        department: editDept, 
-        section: editSection,
-        isAdvisor: isAdvisor,
-        advisorClassId: isAdvisor ? advisorClassId : null,
-        assignedSubjectIds: assignedSubjectIds
-      };
+      const updatePayload: any = { department: editDept, section: editSection };
       if (editingUser.role === "student") {
         updatePayload.classId = editClassId || null;
         if (selectedClass) {
@@ -103,6 +106,9 @@ export default function UsersPage() {
           updatePayload.year = selectedClass.year;
           updatePayload.semester = selectedClass.semester;
         }
+      } else if (editingUser.role === "professor") {
+        updatePayload.classAdvisorId = editClassAdvisorId || null;
+        updatePayload.subjectsTaught = editSubjectsTaught.split(',').map(s=>s.trim()).filter(Boolean);
       }
       await updateDoc(doc(db, "users", editingUser.uid), updatePayload);
       setEditingUser(null);
@@ -161,18 +167,13 @@ export default function UsersPage() {
                   <tr key={user.uid} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1 mt-1">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                          user.role === 'admin' ? 'bg-red-500/20 text-red-400' : 
-                          user.role === 'professor' ? 'bg-purple-500/20 text-purple-400' : 
-                          'bg-blue-500/20 text-blue-400'
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                          user.role === 'admin' ? "bg-red-500/20 text-red-400" :
+                          user.role === 'professor' ? "bg-purple-500/20 text-purple-400" :
+                          "bg-cyan-500/20 text-cyan-400"
                         }`}>
-                          {user.role}
-                        </span>
-                        {user.role === 'professor' && user.isAdvisor && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider">Advisor</span>
-                        )}
-                      </div>
+                          {(user.displayName || "U")[0]}
+                        </div>
                         <span className="font-medium text-gray-200">{user.displayName}</span>
                       </div>
                     </td>
@@ -193,10 +194,18 @@ export default function UsersPage() {
                           </span>
                         </div>
                       ) : user.department ? (
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">{user.department}</span>
-                          {user.section && <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">{user.section}</span>}
-                          {user.staffId && <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">ID: {user.staffId}</span>}
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">{user.department}</span>
+                            {user.section && <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">{user.section}</span>}
+                            {user.staffId && <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">ID: {user.staffId}</span>}
+                          </div>
+                          {user.classAdvisorId && (
+                            <span className="text-[10px] text-cyan-400">Class Advisor: {getClassName(user.classAdvisorId)}</span>
+                          )}
+                          {user.subjectsTaught && user.subjectsTaught.length > 0 && (
+                            <span className="text-[10px] text-purple-400">Subjects: {user.subjectsTaught.join(", ")}</span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-gray-600 text-xs italic">Unassigned</span>
@@ -218,9 +227,8 @@ export default function UsersPage() {
                                 setEditClassId(user.classId || "");
                                 setEditDept(user.department || DEPARTMENTS[0]);
                                 setEditSection(user.section || SECTIONS[0]);
-                                setIsAdvisor(user.isAdvisor || false);
-                                setAdvisorClassId(user.advisorClassId || "");
-                                setAssignedSubjectIds(user.assignedSubjectIds || []);
+                                setEditClassAdvisorId(user.classAdvisorId || "");
+                                setEditSubjectsTaught(user.subjectsTaught ? user.subjectsTaught.join(", ") : "");
                               }}
                               className="p-2 text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
                               title="Edit Allocation"
@@ -299,16 +307,31 @@ export default function UsersPage() {
                 )}
 
                 {role === "professor" && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
+                        <select value={department} onChange={e => setDepartment(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
+                          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1.5">Staff ID</label>
+                        <input type="text" placeholder="e.g. FAC-1049" value={staffId} onChange={e => setStaffId(e.target.value)} className="w-full bg-white/[0.02] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase" />
+                      </div>
+                    </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
-                      <select value={department} onChange={e => setDepartment(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
-                        {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Class Advisor (Optional)</label>
+                      <select value={classAdvisorId} onChange={e => setClassAdvisorId(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
+                        <option value="">Not Advising</option>
+                        {activeClasses.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.department} — Sec {c.section} | Sem {c.semester}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Staff ID</label>
-                      <input type="text" placeholder="e.g. FAC-1049" value={staffId} onChange={e => setStaffId(e.target.value)} className="w-full bg-white/[0.02] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase" />
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Subjects Taught (Optional)</label>
+                      <input type="text" placeholder="e.g. Maths, Physics, DSA" value={subjectsTaught} onChange={e => setSubjectsTaught(e.target.value)} className="w-full bg-white/[0.02] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all" />
                     </div>
                   </div>
                 )}
@@ -348,7 +371,7 @@ export default function UsersPage() {
                     <p className="text-xs text-gray-500 mt-1.5">Selecting a class auto-fills Department, Section, Year, and Semester from the class definition.</p>
                   </div>
                 ) : (
-                  <>
+                  <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
@@ -363,29 +386,20 @@ export default function UsersPage() {
                         </select>
                       </div>
                     </div>
-
-                    <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <label className="text-sm font-bold text-gray-200">Class Advisor</label>
-                          <p className="text-xs text-gray-500">Designate as current class lead</p>
-                        </div>
-                        <input type="checkbox" checked={isAdvisor} onChange={e => setIsAdvisor(e.target.checked)} className="w-5 h-5 rounded accent-cyan-500" />
-                      </div>
-                      
-                      {isAdvisor && (
-                        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Advisor for Class</label>
-                          <select value={advisorClassId} onChange={e => setAdvisorClassId(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2 px-3 text-xs outline-none transition-all text-white">
-                            <option value="">Select Class...</option>
-                            {activeClasses.map((c: any) => (
-                              <option key={c.id} value={c.id}>{c.department} — {c.section} | Sem {c.semester}</option>
-                            ))}
-                          </select>
-                        </motion.div>
-                      )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Class Advisor (Optional)</label>
+                      <select value={editClassAdvisorId} onChange={e => setEditClassAdvisorId(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
+                        <option value="">Not Advising</option>
+                        {activeClasses.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.department} — Sec {c.section} | Sem {c.semester}</option>
+                        ))}
+                      </select>
                     </div>
-                  </>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Subjects Taught (Optional)</label>
+                      <input type="text" placeholder="e.g. Maths, Physics, DSA" value={editSubjectsTaught} onChange={e => setEditSubjectsTaught(e.target.value)} className="w-full bg-white/[0.02] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all" />
+                    </div>
+                  </div>
                 )}
 
                 <div className="pt-4 flex items-center justify-end gap-3 border-t border-white/[0.06] mt-6">
