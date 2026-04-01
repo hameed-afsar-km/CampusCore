@@ -7,7 +7,7 @@ import { useFirestore } from "@/lib/use-firestore";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { storage, db } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL, uploadBytes } from "firebase/storage";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { format } from "date-fns";
 import {
   Trophy,
@@ -217,16 +217,16 @@ export default function EventsPage() {
       let attUrl = form.attachmentUrl;
       let attName = form.attachmentName;
 
+      // Use Cloudinary instead of Firebase for Thumbnails
       if (thumbnailFile) {
-        const tRef = ref(storage, `event_thumbnails/${Date.now()}_${thumbnailFile.name}`);
-        await uploadBytes(tRef, thumbnailFile);
-        thumbUrl = await getDownloadURL(tRef);
+        const res = await uploadToCloudinary(thumbnailFile);
+        thumbUrl = res.secure_url;
       }
 
+      // Use Cloudinary instead of Firebase for Attachments
       if (attachmentFile) {
-        const aRef = ref(storage, `event_attachments/${Date.now()}_${attachmentFile.name}`);
-        await uploadBytes(aRef, attachmentFile);
-        attUrl = await getDownloadURL(aRef);
+        const res = await uploadToCloudinary(attachmentFile);
+        attUrl = res.secure_url;
         attName = attachmentFile.name;
       }
 
@@ -237,10 +237,7 @@ export default function EventsPage() {
           await updateDoc(doc(db, "college_events", editingId), payload);
         } else {
           await addDoc(collection(db, "college_events"), {
-            ...payload,
-            source: "campus",
-            status: "upcoming",
-            createdAt: serverTimestamp(),
+            ...payload, source: "campus", status: "upcoming", createdAt: serverTimestamp(),
           });
         }
       } else {
@@ -248,9 +245,7 @@ export default function EventsPage() {
           await updateUserEvent(editingId, payload);
         } else {
           await addUserEvent({
-            ...payload,
-            source: "user",
-            status: "upcoming",
+            ...payload, source: "user", status: "upcoming",
           });
         }
       }
@@ -258,12 +253,10 @@ export default function EventsPage() {
       setThumbnailFile(null);
       setAttachmentFile(null);
       setShowModal(false);
-    } catch (err) {
-      console.error("Failed to save event:", err);
-      alert("Failed to upload files or save the event.");
-    } finally {
-      setIsUploading(false);
-    }
+    } catch (err: any) {
+      console.error("Cloudinary failed:", err);
+      alert(err.message || "Failed to upload files to Cloudinary. Check your .env setup.");
+    } finally { setIsUploading(false); }
   };
 
   const performDelete = async () => {
@@ -279,40 +272,30 @@ export default function EventsPage() {
   const handleProofUpload = async (eventId: string, file: File) => {
     if (!file) return;
 
-    const storageRef = ref(storage, `event_proofs/${eventId}_${file.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    try {
+      const res = await uploadToCloudinary(file, (percent) => {
+        setUploadProgress(prev => ({ ...prev, [eventId]: percent }));
+      });
 
-    uploadTask.on('state_changed', 
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setUploadProgress(prev => ({ ...prev, [eventId]: progress }));
-      },
-      (error) => {
-        console.error("Upload error:", error);
-        setUploadProgress(prev => {
-          const next = { ...prev };
-          delete next[eventId];
-          return next;
-        });
-      },
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        
-        if (isAdminOrProfessor && editingId && isEditingCampus) { // Actually, proofs are user specific, let's just use updateUserEvent.
-           // However wait, campus events don't have proofUrl per user easily because we combined them.
-           // Actually, the students wouldn't be uploading proofs for campus events since status won't be completed/won unless they own it.
-        }
-        await updateUserEvent(eventId, { 
-          proofUrl: downloadURL,
-          proofName: file.name
-        });
-        setUploadProgress(prev => {
-          const next = { ...prev };
-          delete next[eventId];
-          return next;
-        });
-      }
-    );
+      await updateUserEvent(eventId, { 
+        proofUrl: res.secure_url,
+        proofName: file.name
+      });
+
+      setUploadProgress(prev => {
+        const next = { ...prev };
+        delete next[eventId];
+        return next;
+      });
+    } catch (err: any) {
+      console.error("Proof upload failed:", err);
+      alert("Failed to upload certificate to Cloudinary.");
+      setUploadProgress(prev => {
+        const next = { ...prev };
+        delete next[eventId];
+        return next;
+      });
+    }
   };
 
   return (

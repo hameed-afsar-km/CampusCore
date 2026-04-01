@@ -2,8 +2,7 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { storage } from "@/lib/firebase";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { useFirestore } from "@/lib/use-firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
@@ -163,45 +162,32 @@ export default function NotesPage() {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !subjectInput.trim() || !user) return;
-    const storagePath = `notes/${user.uid}/${Date.now()}-${selectedFile.name}`;
-    const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+    
+    setFileError("");
+    try {
+      const res = await uploadToCloudinary(selectedFile, (percent) => {
+        setUploadProgress(percent);
+      });
 
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setUploadProgress(progress);
-      },
-      (error) => {
-        console.error("Upload failed:", error);
-        setFileError("Upload failed: Check your internet or file permissions.");
-        setUploadProgress(null);
-      },
-      async () => {
-        try {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          await add({
-            name: selectedFile.name.replace(/\.[^/.]+$/, ""),
-            subject: subjectInput.trim(),
-            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-            size: formatBytes(selectedFile.size),
-            type: getFileType(selectedFile),
-            url: downloadURL,
-            storagePath: storagePath,
-          });
+      await add({
+        name: selectedFile.name.replace(/\.[^/.]+$/, ""),
+        subject: subjectInput.trim(),
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        size: formatBytes(selectedFile.size),
+        type: getFileType(selectedFile),
+        url: res.secure_url,
+        cloudinaryId: res.public_id,
+      });
 
-          setShowUploadModal(false);
-          setSelectedFile(null);
-          setSubjectInput("");
-          setUploadProgress(null);
-        } catch (addError) {
-          console.error("Firestore database error:", addError);
-          setFileError("File uploaded, but failed to save note details.");
-          setUploadProgress(null);
-        }
-      }
-    );
+      setShowUploadModal(false);
+      setSelectedFile(null);
+      setSubjectInput("");
+      setUploadProgress(null);
+    } catch (err: any) {
+      console.error("Upload failed:", err);
+      setFileError(err.message || "Upload failed. Check your Cloudinary configuration.");
+      setUploadProgress(null);
+    }
   };
 
   return (
