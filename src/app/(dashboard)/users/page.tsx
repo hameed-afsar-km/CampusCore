@@ -8,6 +8,7 @@ import { Plus, Search, Mail, Shield, Trash2, X } from "lucide-react";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { DEPARTMENTS, SECTIONS } from "../timetable/page";
 
 export default function UsersPage() {
   const { userData, adminCreateUser } = useAuth();
@@ -22,8 +23,8 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
-  const [department, setDepartment] = useState("");
-  const [section, setSection] = useState("");
+  const [department, setDepartment] = useState(DEPARTMENTS[0]);
+  const [section, setSection] = useState(SECTIONS[0]);
   const [staffId, setStaffId] = useState("");
   const [error, setError] = useState("");
 
@@ -297,23 +298,23 @@ export default function UsersPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. CSE"
+                      <select
                         value={department}
                         onChange={(e) => setDepartment(e.target.value)}
-                        className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
-                      />
+                        className="w-full bg-[#0a0a0a] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white"
+                      >
+                        {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. A"
+                      <select
                         value={section}
                         onChange={(e) => setSection(e.target.value)}
-                        className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
-                      />
+                        className="w-full bg-[#0a0a0a] border border-white/[0.08] hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white"
+                      >
+                        {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -391,23 +392,23 @@ export default function UsersPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. CSE"
+                    <select
                       value={editDept}
                       onChange={(e) => setEditDept(e.target.value)}
-                      className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-cyan-500/30 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
-                    />
+                      className="w-full bg-[#0a0a0a] border border-white/[0.08] hover:border-cyan-500/30 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white"
+                    >
+                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. A"
+                    <select
                       value={editSection}
                       onChange={(e) => setEditSection(e.target.value)}
-                      className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-cyan-500/30 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all uppercase"
-                    />
+                      className="w-full bg-[#0a0a0a] border border-white/[0.08] hover:border-cyan-500/30 focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white"
+                    >
+                      {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                 </div>
 

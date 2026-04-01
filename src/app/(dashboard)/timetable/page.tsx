@@ -7,6 +7,9 @@ import { useFirestore } from "@/lib/use-firestore";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { Plus, Trash2, Edit2, X, ShieldAlert, GraduationCap, Users, BookOpen, MapPin } from "lucide-react";
 
+export const DEPARTMENTS = ["CSE", "ECE", "EEE", "MECH", "CIVIL", "IT", "BBA", "MBA"];
+export const SECTIONS = ["A", "B", "C", "D"];
+
 type DayOfWeek = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
 const DAYS: DayOfWeek[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -186,8 +189,12 @@ export default function TimetablePage() {
           <div className="flex items-center gap-3">
             {viewMode === "class" ? (
               <>
-                <input type="text" placeholder="Dept" value={viewDept} onChange={(e) => setViewDept(e.target.value.toUpperCase())} className="bg-[#0a0e17] border border-white/[0.08] hover:border-purple-500/50 rounded-lg px-3 py-1.5 text-sm w-20 uppercase outline-none" />
-                <input type="text" placeholder="Sec" value={viewSection} onChange={(e) => setViewSection(e.target.value.toUpperCase())} className="bg-[#0a0e17] border border-white/[0.08] hover:border-purple-500/50 rounded-lg px-3 py-1.5 text-sm w-16 uppercase outline-none" />
+                <select value={viewDept} onChange={(e) => setViewDept(e.target.value)} className="bg-[#0a0e17] border border-white/[0.08] hover:border-purple-500/50 rounded-lg px-3 py-1.5 text-sm w-24 outline-none">
+                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <select value={viewSection} onChange={(e) => setViewSection(e.target.value)} className="bg-[#0a0e17] border border-white/[0.08] hover:border-purple-500/50 rounded-lg px-3 py-1.5 text-sm w-16 outline-none">
+                   {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </>
             ) : (
               <select value={viewFacultyId} onChange={(e) => setViewFacultyId(e.target.value)} className="bg-[#0a0e17] border border-white/[0.08] hover:border-cyan-500/50 rounded-lg px-3 py-1.5 text-sm w-48 outline-none">
