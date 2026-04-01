@@ -153,7 +153,7 @@ export default function UsersPage() {
                         }`}>
                           {user.role}
                         </span>
-                        {user.role === "student" && (
+                        {(user.role === "student" || user.role === "professor") && (
                           <div className="flex items-center gap-1 mt-1">
                             <span className="text-[10px] bg-white/[0.05] border border-white/[0.1] px-1.5 py-0.5 rounded text-gray-400">
                               {user.department || "No Dept"}
@@ -181,12 +181,12 @@ export default function UsersPage() {
     <td className="px-6 py-4 text-right">
                       {user.uid !== userData?.uid && (
                         <div className="flex justify-end gap-1">
-                          {user.role === "student" && (
+                          {user.role !== "admin" && (
                             <button 
                               onClick={() => {
                                 setEditingUser(user);
-                                setEditDept(user.department || "");
-                                setEditSection(user.section || "");
+                                setEditDept(user.department || DEPARTMENTS[0]);
+                                setEditSection(user.section || SECTIONS[0]);
                               }}
                               className="p-2 text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
                             >
@@ -294,7 +294,7 @@ export default function UsersPage() {
                   </select>
                 </div>
 
-                {role === "student" && (
+                {(role === "student" || role === "professor") && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>

@@ -86,18 +86,25 @@ export function useFirestore<T extends { id?: string }>(
   const add = async (item: Omit<T, "id">) => {
     if (userSpecific && !user) throw new Error("User must be logged in to add data.");
     const colRef = collection(db, collectionName);
-    return await addDoc(colRef, {
+    
+    const payload: any = {
       ...item,
-      userId: userSpecific ? user?.uid : undefined,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+    if (userSpecific && user?.uid) {
+      payload.userId = user.uid;
+    }
+    
+    return await addDoc(colRef, payload);
   };
 
   const update = async (id: string, item: Partial<T>) => {
     const docRef = doc(db, collectionName, id);
+    // Remove any undefined values to prevent Firestore errors
+    const safeItem = Object.fromEntries(Object.entries(item).filter(([_, v]) => v !== undefined));
     return await updateDoc(docRef, {
-      ...item,
+      ...safeItem,
       updatedAt: serverTimestamp(),
     });
   };
