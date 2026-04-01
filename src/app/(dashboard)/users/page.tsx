@@ -8,7 +8,7 @@ import { Plus, Search, Mail, Shield, Trash2, X, Edit2, Users } from "lucide-reac
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { DEPARTMENTS, SECTIONS } from "../timetable/page";
+import { DEPARTMENTS, SECTIONS } from "@/lib/constants";
 
 export default function UsersPage() {
   const { userData, adminCreateUser } = useAuth();
@@ -20,7 +20,7 @@ export default function UsersPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Create form
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,16 +30,17 @@ export default function UsersPage() {
   const [staffId, setStaffId] = useState("");
   const [classId, setClassId] = useState("");
   const [classAdvisorId, setClassAdvisorId] = useState("");
-  const [subjectsTaught, setSubjectsTaught] = useState("");
+  const [subjectsTaught, setSubjectsTaught] = useState<string[]>([]);
+  const [newSubject, setNewSubject] = useState("");
   const [error, setError] = useState("");
 
-  // Edit form
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [editClassId, setEditClassId] = useState("");
   const [editDept, setEditDept] = useState("");
   const [editSection, setEditSection] = useState("");
   const [editClassAdvisorId, setEditClassAdvisorId] = useState("");
-  const [editSubjectsTaught, setEditSubjectsTaught] = useState("");
+  const [editSubjectsTaught, setEditSubjectsTaught] = useState<string[]>([]);
+  const [editNewSubject, setEditNewSubject] = useState("");
 
   const activeClasses = useMemo(() => classes.filter((c: any) => c.isActive !== false), [classes]);
 
@@ -66,17 +67,16 @@ export default function UsersPage() {
     try {
       if (adminCreateUser) {
         const newUid = await adminCreateUser(email, password, name, role, department, section, staffId);
-        
+
         const extraPayload: any = {};
         if (role === "student" && classId) {
           extraPayload.classId = classId;
         }
         if (role === "professor") {
           if (classAdvisorId) extraPayload.classAdvisorId = classAdvisorId;
-          const subs = subjectsTaught.split(',').map(s=>s.trim()).filter(Boolean);
-          if (subs.length > 0) extraPayload.subjectsTaught = subs;
+          if (subjectsTaught.length > 0) extraPayload.subjectsTaught = subjectsTaught;
         }
-        
+
         if (Object.keys(extraPayload).length > 0) {
           await updateDoc(doc(db, "users", newUid), extraPayload);
         }
@@ -84,7 +84,7 @@ export default function UsersPage() {
       setShowModal(false);
       setName(""); setEmail(""); setPassword(""); setRole("student");
       setDepartment(DEPARTMENTS[0]); setSection(SECTIONS[0]); setStaffId(""); setClassId("");
-      setClassAdvisorId(""); setSubjectsTaught("");
+      setClassAdvisorId(""); setSubjectsTaught([]); setNewSubject("");
     } catch (err: any) {
       setError(err.message || "Failed to create user.");
     } finally {
@@ -108,7 +108,7 @@ export default function UsersPage() {
         }
       } else if (editingUser.role === "professor") {
         updatePayload.classAdvisorId = editClassAdvisorId || null;
-        updatePayload.subjectsTaught = editSubjectsTaught.split(',').map(s=>s.trim()).filter(Boolean);
+        updatePayload.subjectsTaught = editSubjectsTaught;
       }
       await updateDoc(doc(db, "users", editingUser.uid), updatePayload);
       setEditingUser(null);
@@ -167,22 +167,20 @@ export default function UsersPage() {
                   <tr key={user.uid} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                          user.role === 'admin' ? "bg-red-500/20 text-red-400" :
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${user.role === 'admin' ? "bg-red-500/20 text-red-400" :
                           user.role === 'professor' ? "bg-purple-500/20 text-purple-400" :
-                          "bg-cyan-500/20 text-cyan-400"
-                        }`}>
+                            "bg-cyan-500/20 text-cyan-400"
+                          }`}>
                           {(user.displayName || "U")[0]}
                         </div>
                         <span className="font-medium text-gray-200">{user.displayName}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium capitalize ${
-                        user.role === 'admin' ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium capitalize ${user.role === 'admin' ? "bg-red-500/10 text-red-400 border border-red-500/20" :
                         user.role === 'professor' ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" :
-                        "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
-                      }`}>
+                          "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                        }`}>
                         {user.role}
                       </span>
                     </td>
@@ -228,7 +226,8 @@ export default function UsersPage() {
                                 setEditDept(user.department || DEPARTMENTS[0]);
                                 setEditSection(user.section || SECTIONS[0]);
                                 setEditClassAdvisorId(user.classAdvisorId || "");
-                                setEditSubjectsTaught(user.subjectsTaught ? user.subjectsTaught.join(", ") : "");
+                                setEditSubjectsTaught(user.subjectsTaught || []);
+                                setEditNewSubject("");
                               }}
                               className="p-2 text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-colors"
                               title="Edit Allocation"
@@ -256,7 +255,7 @@ export default function UsersPage() {
       {/* Create Modal */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-6 shadow-2xl">
               <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-white/[0.05] rounded-xl transition-colors">
@@ -330,8 +329,49 @@ export default function UsersPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Subjects Taught (Optional)</label>
-                      <input type="text" placeholder="e.g. Maths, Physics, DSA" value={subjectsTaught} onChange={e => setSubjectsTaught(e.target.value)} className="w-full bg-white/[0.02] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all" />
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Subjects Taught</label>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="e.g. Maths"
+                            value={newSubject}
+                            onChange={e => setNewSubject(e.target.value)}
+                            className="flex-1 bg-white/[0.02] border border-white/[0.08] focus:border-purple-500/50 rounded-xl px-4 py-2 text-sm outline-none"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (newSubject.trim()) {
+                                  setSubjectsTaught([...subjectsTaught, newSubject.trim()]);
+                                  setNewSubject("");
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newSubject.trim()) {
+                                setSubjectsTaught([...subjectsTaught, newSubject.trim()]);
+                                setNewSubject("");
+                              }
+                            }}
+                            className="p-2 bg-purple-500/20 text-purple-400 rounded-xl hover:bg-purple-500/30 transition-all"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {subjectsTaught.map((sub, i) => (
+                            <span key={i} className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.05] border border-white/[0.1] rounded-lg text-xs text-gray-300">
+                              {sub}
+                              <button type="button" onClick={() => setSubjectsTaught(subjectsTaught.filter((_, idx) => idx !== i))} className="hover:text-red-400">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -349,7 +389,7 @@ export default function UsersPage() {
       {/* Edit / Allocate Modal */}
       <AnimatePresence>
         {editingUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60" onClick={() => setEditingUser(null)} />
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-6 shadow-2xl">
               <button onClick={() => setEditingUser(null)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-white/[0.05] rounded-xl transition-colors"><X className="w-5 h-5" /></button>
@@ -396,8 +436,49 @@ export default function UsersPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Subjects Taught (Optional)</label>
-                      <input type="text" placeholder="e.g. Maths, Physics, DSA" value={editSubjectsTaught} onChange={e => setEditSubjectsTaught(e.target.value)} className="w-full bg-white/[0.02] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all" />
+                      <label className="block text-sm font-medium text-gray-300 mb-1.5">Subjects Taught</label>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Add subject..."
+                            value={editNewSubject}
+                            onChange={e => setEditNewSubject(e.target.value)}
+                            className="flex-1 bg-white/[0.02] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2 text-sm outline-none"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (editNewSubject.trim()) {
+                                  setEditSubjectsTaught([...editSubjectsTaught, editNewSubject.trim()]);
+                                  setEditNewSubject("");
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editNewSubject.trim()) {
+                                setEditSubjectsTaught([...editSubjectsTaught, editNewSubject.trim()]);
+                                setEditNewSubject("");
+                              }
+                            }}
+                            className="p-2 bg-cyan-500/20 text-cyan-400 rounded-xl hover:bg-cyan-500/30 transition-all"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {editSubjectsTaught.map((sub, i) => (
+                            <span key={i} className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.05] border border-white/[0.1] rounded-lg text-xs text-gray-300">
+                              {sub}
+                              <button type="button" onClick={() => setEditSubjectsTaught(editSubjectsTaught.filter((_, idx) => idx !== i))} className="hover:text-red-400">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

@@ -13,7 +13,7 @@ import {
   Plus, X, Users, BookOpen, ChevronRight, Shield, ArrowUpCircle,
   GraduationCap, Layers, Calendar, Edit2, Archive, Trash2, Search
 } from "lucide-react";
-import { DEPARTMENTS, SECTIONS } from "../timetable/page";
+import { DEPARTMENTS, SECTIONS } from "@/lib/constants";
 
 export interface ClassDoc {
   id?: string;
