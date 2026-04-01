@@ -33,7 +33,7 @@ interface Note {
   size: string;
   type: "pdf" | "doc" | "image";
   url: string;
-  storagePath: string;
+  cloudinaryId?: string;
   userId?: string;
 }
 
@@ -106,9 +106,6 @@ export default function NotesPage() {
   const handleDelete = async () => {
     if (!confirmDelete) return;
     try {
-      // Delete from Storage
-      const storageRef = ref(storage, confirmDelete.storagePath);
-      await deleteObject(storageRef);
       // Delete from Firestore
       await remove(confirmDelete.id);
       setConfirmDelete(null);
