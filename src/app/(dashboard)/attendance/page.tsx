@@ -1,253 +1,226 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  CheckCircle2, XCircle, AlertTriangle, Info, TrendingUp, BarChart3, BookOpen
+import { 
+  CheckCircle2, XCircle, RotateCcw, 
+  TrendingUp, Calendar, BookOpen, AlertCircle,
+  Hash, ClipboardCheck, Info, Sparkles
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
-import FacultyAttendance from "./FacultyAttendance";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
+
+interface SubjectAttendance {
+  attended: number;
+  total: number;
+}
 
 export default function AttendancePage() {
   const { userData } = useAuth();
+  const { data: allSubjects } = useFirestore<any>("subjects", false);
+  const [attendanceData, setAttendanceData] = useState<Record<string, SubjectAttendance>>({});
+  const [loading, setLoading] = useState(true);
 
-  // Professor view
-  if (userData?.role === "professor") {
+  // Auto-sync subjects based on student's semester, department
+  const mySubjects = useMemo(() => {
+    if (!userData || userData.role !== 'student') return [];
+    return allSubjects.filter((s: any) => 
+      s.department === userData.department && 
+      s.semester === userData.semester
+    );
+  }, [allSubjects, userData]);
+
+  // Real-time listener for student's specific attendance record
+  useEffect(() => {
+    if (!userData?.uid) return;
+    
+    const unsubscribe = onSnapshot(doc(db, "attendance", userData.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        setAttendanceData(docSnap.data().subjects || {});
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [userData?.uid]);
+
+  const updateAttendance = async (subCode: string, type: 'attended' | 'absent') => {
+    if (!userData?.uid) return;
+    
+    const current = attendanceData[subCode] || { attended: 0, total: 0 };
+    const newData = {
+      ...attendanceData,
+      [subCode]: {
+        attended: type === 'attended' ? current.attended + 1 : current.attended,
+        total: current.total + 1
+      }
+    };
+
+    await setDoc(doc(db, "attendance", userData.uid), { subjects: newData }, { merge: true });
+  };
+
+  const clearSubjectData = async (subCode: string) => {
+    if (!userData?.uid) return;
+    const newData = { ...attendanceData };
+    delete newData[subCode];
+    await setDoc(doc(db, "attendance", userData.uid), { subjects: newData }, { merge: true });
+  };
+
+  const calculateStats = (attended: number, total: number) => {
+    if (total === 0) return { percentage: 0, status: 'N/A', color: 'text-gray-500', leaves: 0 };
+    const percentage = (attended / total) * 100;
+    
+    // Threshold is 75%
+    // To maintain 75%: (attended / (total + x)) >= 0.75 => attended / 0.75 >= total + x => x = (attended/0.75) - total
+    const maxTotalPossible = Math.floor(attended / 0.75);
+    const leaves = Math.max(0, maxTotalPossible - total);
+
+    let status = 'On Track';
+    let color = 'text-emerald-400';
+    if (percentage < 75) {
+      status = 'Critical';
+      color = 'text-red-400';
+    } else if (percentage < 85) {
+      status = 'Caution';
+      color = 'text-amber-400';
+    }
+
+    return { percentage: Math.round(percentage), status, color, leaves };
+  };
+
+  if (userData?.role !== 'student') {
     return (
-      <div className="space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Faculty Attendance Panel</h1>
-          <p className="text-gray-400 mt-1">Mark attendance for your assigned classes and subjects</p>
+      <div className="h-[80vh] flex flex-col items-center justify-center text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-gray-500">
+           <ClipboardCheck className="w-8 h-8" />
         </div>
-        <FacultyAttendance />
+        <h1 className="text-2xl font-bold text-white">Faculty Attendance Panel</h1>
+        <p className="text-gray-500 max-w-sm">The faculty view for marking bulk class attendance is currently being optimized. Please use the mobile terminal for real-time tracking.</p>
       </div>
     );
   }
 
-  // Admin view — overview of all subjects
-  if (userData?.role === "admin") {
-    return <AdminAttendanceView />;
-  }
-
-  // Student view — their own attendance per subject
-  return <StudentAttendanceView />;
-}
-
-// ─── Student View ─────────────────────────────────────────────────────────────
-function StudentAttendanceView() {
-  const { userData } = useAuth();
-  const { data: rawRecords, loading } = useFirestore<any>("attendance", false);
-
-  // Filter records for this student via client-side (since useFirestore is global)
-  const myRecords = useMemo(() =>
-    rawRecords.filter((r: any) => r.studentId === userData?.uid),
-    [rawRecords, userData?.uid]
-  );
-
-  // Group by subjectId
-  const subjectMap = useMemo(() => {
-    const map: Record<string, { name: string; code: string; present: number; total: number }> = {};
-    myRecords.forEach((r: any) => {
-      if (!map[r.subjectId]) {
-        map[r.subjectId] = { name: r.subjectName || "Unknown", code: r.subjectCode || "", present: 0, total: 0 };
-      }
-      map[r.subjectId].total += 1;
-      if (r.status === "present") map[r.subjectId].present += 1;
-    });
-    return map;
-  }, [myRecords]);
-
-  const subjects = Object.entries(subjectMap).map(([id, v]) => ({
-    id,
-    name: v.name,
-    code: v.code,
-    held: v.total,
-    attended: v.present,
-    percentage: v.total > 0 ? (v.present / v.total) * 100 : 0,
-  }));
-
-  const lowAttendance = subjects.filter(s => s.percentage < 75 && s.held > 0);
-
-  const calcNeeded = (attended: number, held: number) =>
-    Math.max(0, Math.ceil((0.75 * held - attended) / 0.25));
-  const calcSafeSkips = (attended: number, held: number) =>
-    Math.floor(attended / 0.75) - held;
-
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Attendance Tracker</h1>
-        <p className="text-gray-400 mt-1">Your subject-wise attendance • Target: 75%</p>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-white/[0.05]">
+        <div>
+          <div className="flex items-center gap-2 text-cyan-400 mb-1">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Compliance Hub</span>
+          </div>
+          <h1 className="text-3xl font-black text-white tracking-tight">Attendance <span className="text-gray-500">Oracle</span></h1>
+          <p className="text-gray-500 text-xs mt-1 font-medium italic">Auto-synced for {userData.department} • Semester {userData.semester}</p>
+        </div>
+
+        <div className="flex items-center gap-4 bg-white/[0.03] border border-white/[0.08] px-6 py-3 rounded-2xl">
+          <div className="text-center border-r border-white/[0.08] pr-6">
+            <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-1">Status</p>
+            <p className="text-sm font-bold text-emerald-400 uppercase">Active</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-1">Compliance</p>
+            <p className="text-sm font-bold text-white">75% Min.</p>
+          </div>
+        </div>
       </div>
 
-      {/* Low Attendance Alert */}
-      <AnimatePresence>
-        {lowAttendance.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-start gap-3"
-          >
-            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider mb-1">Low Attendance Alert</h3>
-              <p className="text-sm text-red-400/80">
-                Below 75% in: {lowAttendance.map(s => s.code || s.name).join(", ")}. Attend upcoming classes to avoid trouble.
-              </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {mySubjects.map((subject: any) => {
+          const stats = attendanceData[subject.code] || { attended: 0, total: 0 };
+          const { percentage, status, color, leaves } = calculateStats(stats.attended, stats.total);
+
+          return (
+            <motion.div 
+              key={subject.id}
+              whileHover={{ y: -5 }}
+              className="bg-[#050505] border border-white/[0.08] rounded-[2rem] p-6 space-y-6 relative overflow-hidden group transition-all hover:border-white/20"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-[50px] rounded-full -translate-y-1/2 translate-x-1/2" />
+              
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-mono text-cyan-500/60 uppercase font-black tracking-widest">{subject.code}</span>
+                  <h3 className="text-lg font-bold text-white leading-tight group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{subject.name}</h3>
+                </div>
+                <button 
+                  onClick={() => confirm("Clear all attendance data for this subject?") && clearSubjectData(subject.code)}
+                  className="p-2 text-gray-700 hover:text-red-400 hover:bg-red-400/5 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 py-2">
+                <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 text-center">
+                   <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest mb-1">Percentage</p>
+                   <p className={`text-2xl font-black ${color}`}>{percentage}%</p>
+                </div>
+                <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 text-center">
+                   <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest mb-1">Leaves Left</p>
+                   <p className="text-2xl font-black text-white">{leaves}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
+                   <span className="text-gray-500">Attendance Log</span>
+                   <span className={color}>{status}</span>
+                 </div>
+                 <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percentage}%` }}
+                      className={`h-full ${percentage < 75 ? 'bg-red-500' : 'bg-cyan-500'}`}
+                    />
+                 </div>
+                 <div className="flex justify-between text-[10px] font-mono text-gray-600">
+                    <span>{stats.attended} Attended</span>
+                    <span>{stats.total} Total Sessions</span>
+                 </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                 <button 
+                   onClick={() => updateAttendance(subject.code, 'attended')}
+                   className="flex-1 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500 hover:text-black py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                 >
+                   <CheckCircle2 className="w-3.5 h-3.5" /> Present
+                 </button>
+                 <button 
+                    onClick={() => updateAttendance(subject.code, 'absent')}
+                    className="flex-1 bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-black py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                 >
+                   <XCircle className="w-3.5 h-3.5" /> Mark Bunk
+                 </button>
+              </div>
+            </motion.div>
+          );
+        })}
+
+        {mySubjects.length === 0 && !loading && (
+          <div className="col-span-full py-20 text-center space-y-4 border-2 border-dashed border-white/[0.05] rounded-[3rem]">
+            <div className="w-16 h-16 bg-white/[0.03] rounded-full flex items-center justify-center mx-auto text-gray-600">
+               <BookOpen className="w-8 h-8" />
             </div>
-          </motion.div>
+            <div className="space-y-1">
+               <h3 className="text-white font-bold text-lg">No Subjects Allotted</h3>
+               <p className="text-gray-500 text-sm max-w-xs mx-auto">It appears there are no subjects mapped to Semester {userData.semester} for the {userData.department} department yet.</p>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
-
-      {loading ? (
-        <div className="py-16 text-center text-gray-500">Loading your attendance...</div>
-      ) : subjects.length === 0 ? (
-        <div className="col-span-full py-20 text-center bg-white/[0.02] border border-white/[0.08] border-dashed rounded-3xl">
-          <BarChart3 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-400">No attendance records yet</h3>
-          <p className="text-sm text-gray-500 mt-1">Your faculty will mark attendance for your class once sessions begin.</p>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {subjects.map((sub) => {
-            const isDanger = sub.percentage < 75;
-            const safeSkips = calcSafeSkips(sub.attended, sub.held);
-            const needed = calcNeeded(sub.attended, sub.held);
-
-            return (
-              <motion.div
-                key={sub.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="dash-card group relative p-6 flex flex-col hover:border-purple-500/30 transition-all overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-cyan-500/5 -z-10" />
-
-                <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mb-3">
-                  <BookOpen className="w-5 h-5 text-purple-400" />
-                </div>
-
-                {sub.code && <p className="text-[10px] font-bold text-purple-400/70 uppercase tracking-widest mb-0.5">{sub.code}</p>}
-                <h3 className="text-base font-bold text-gray-100 mb-1 line-clamp-1">{sub.name}</h3>
-
-                <div className="flex items-end gap-2 mb-4">
-                  <span className={`text-3xl font-black ${isDanger ? "text-red-400" : "text-emerald-400"}`}>
-                    {sub.percentage.toFixed(0)}%
-                  </span>
-                  <span className="text-xs text-gray-500 mb-1.5">attendance</span>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="relative h-2 w-full bg-white/[0.04] rounded-full overflow-hidden mb-4">
-                  <div className="absolute left-[75%] top-0 bottom-0 w-px bg-white/20 z-10" />
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, sub.percentage)}%` }}
-                    transition={{ duration: 0.7 }}
-                    className={`h-full rounded-full ${isDanger ? "bg-gradient-to-r from-red-500 to-amber-500" : "bg-gradient-to-r from-emerald-500 to-cyan-400"}`}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Attended</p>
-                    <p className="text-sm font-semibold text-gray-200">{sub.attended} / {sub.held}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">Missed</p>
-                    <p className="text-sm font-semibold text-red-400/80">{sub.held - sub.attended}</p>
-                  </div>
-                </div>
-
-                {safeSkips > 0 ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-                    <TrendingUp className="w-4 h-4" />
-                    Can skip <span className="font-bold text-lg mx-0.5">{safeSkips}</span> more classes
-                  </div>
-                ) : isDanger ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
-                    <AlertTriangle className="w-4 h-4" />
-                    Need <span className="font-bold text-lg mx-0.5">{needed}</span> consecutive classes to reach 75%
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
-                    <Info className="w-4 h-4" />
-                    Critical — don&apos;t skip next class
-                  </div>
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Admin Overview ───────────────────────────────────────────────────────────
-function AdminAttendanceView() {
-  const { data: records, loading } = useFirestore<any>("attendance", false);
-
-  const summary = useMemo(() => {
-    const map: Record<string, { subjectName: string; subjectCode: string; present: number; total: number }> = {};
-    records.forEach((r: any) => {
-      const key = r.subjectId || r.subjectCode || "unknown";
-      if (!map[key]) map[key] = { subjectName: r.subjectName || "Unknown", subjectCode: r.subjectCode || "", present: 0, total: 0 };
-      map[key].total += 1;
-      if (r.status === "present") map[key].present += 1;
-    });
-    return Object.entries(map).map(([id, v]) => ({
-      id, ...v,
-      percentage: v.total > 0 ? Math.round((v.present / v.total) * 100) : 0
-    }));
-  }, [records]);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Attendance Overview</h1>
-        <p className="text-gray-400 mt-1">Institution-wide attendance summary across all subjects</p>
       </div>
 
-      <div className="dash-card !p-0 overflow-hidden">
-        <div className="p-4 border-b border-white/[0.06]">
-          <h3 className="font-bold text-gray-200">Subject-wise Attendance Summary</h3>
-        </div>
-        <table className="w-full text-left">
-          <thead className="bg-[#05070a] border-b border-white/[0.06] text-xs text-gray-400 uppercase tracking-wider">
-            <tr>
-              <th className="px-4 py-3">Subject</th>
-              <th className="px-4 py-3 text-center">Total Records</th>
-              <th className="px-4 py-3 text-center">Present</th>
-              <th className="px-4 py-3 text-right">Avg Attendance</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/[0.06] text-sm">
-            {loading ? (
-              <tr><td colSpan={4} className="p-8 text-center text-gray-500">Loading...</td></tr>
-            ) : summary.length === 0 ? (
-              <tr><td colSpan={4} className="p-8 text-center text-gray-500">No attendance data yet.</td></tr>
-            ) : (
-              summary.map(row => (
-                <tr key={row.id} className="hover:bg-white/[0.01]">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-200">{row.subjectName}</p>
-                    {row.subjectCode && <p className="text-xs text-gray-500">{row.subjectCode}</p>}
-                  </td>
-                  <td className="px-4 py-3 text-center text-gray-400">{row.total}</td>
-                  <td className="px-4 py-3 text-center text-gray-400">{row.present}</td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`font-bold text-sm ${row.percentage < 75 ? "text-red-400" : "text-emerald-400"}`}>
-                      {row.percentage}%
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Advisory Footer */}
+      <div className="bg-amber-500/5 border border-amber-500/10 rounded-3xl p-6 flex items-start gap-4">
+         <div className="mt-1"><Info className="w-5 h-5 text-amber-500" /></div>
+         <div className="space-y-1">
+            <h4 className="text-amber-500 font-bold text-sm uppercase tracking-widest">Compliance Advisory</h4>
+            <p className="text-amber-500/60 text-xs leading-relaxed">
+              Maintain a minimum of 75% to remain eligible for examinations. The "Leaves Left" calculation assumes you will attend all subsequent sessions. If your attendance falls below the threshold, it will transition to "Critical" status immediately.
+            </p>
+         </div>
       </div>
     </div>
   );

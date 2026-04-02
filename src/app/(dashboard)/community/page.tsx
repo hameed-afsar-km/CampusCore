@@ -6,10 +6,11 @@ import {
   Users, GraduationCap, ShieldCheck, UserCircle, ArrowLeft, 
   Search, Mail, Building2, LayoutGrid, ChevronRight, 
   Filter, Download, MoreHorizontal, Hash, Upload, X, Check,
-  UserPlus, BookOpen, UserCheck
+  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
+import { DEPARTMENTS, SECTIONS } from "@/lib/constants";
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
@@ -17,10 +18,22 @@ type CategoryId = "admin" | "professor" | "student";
 
 export default function CommunityPage() {
   const { userData, adminCreateUser } = useAuth();
-  const { data: users, loading } = useFirestore<any>("users", false);
+  const { data: users, loading, update, remove } = useFirestore<any>("users", false);
+  const { data: allSubjects } = useFirestore<any>("subjects", false);
+  const { data: activeClassDocs } = useFirestore<any>("classes", false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const professors = useMemo(() => users.filter((u: any) => u.role === "professor"), [users]);
+
+  // Manage Member Modal State
+  const [editUser, setEditUser] = useState<any>(null);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [advSearch, setAdvSearch] = useState("");
+  const [subSearch, setSubSearch] = useState("");
 
   // Import Modal State
   const [showImportModal, setShowImportModal] = useState(false);
@@ -35,6 +48,7 @@ export default function CommunityPage() {
     subjectsCol: "6"
   });
   const [isImporting, setIsImporting] = useState(false);
+  const [validationReport, setValidationReport] = useState<{ missingSubjects: string[], invalidAdvisors: string[] } | null>(null);
 
   const stats = useMemo(() => {
     return {
@@ -54,35 +68,43 @@ export default function CommunityPage() {
     );
   }, [users, selectedCategory, searchQuery]);
 
-  const categories = [
-    { 
-      id: "admin" as CategoryId, 
-      title: "Administrators", 
-      count: stats.admin,
-      icon: <ShieldCheck className="w-6 h-6" />,
-      color: "#ef4444",
-      bgClass: "from-red-500/20 to-transparent",
-      desc: "Governance & Systems Control"
-    },
-    { 
-      id: "professor" as CategoryId, 
-      title: "Academic Faculty", 
-      count: stats.professor,
-      icon: <UserCircle className="w-6 h-6" />,
-      color: "#a855f7",
-      bgClass: "from-purple-500/20 to-transparent",
-      desc: "Subject Experts & Mentors"
-    },
-    { 
-      id: "student" as CategoryId, 
-      title: "Students Hub", 
-      count: stats.student,
-      icon: <GraduationCap className="w-6 h-6" />,
-      color: "#06b6d4",
-      bgClass: "from-cyan-500/20 to-transparent",
-      desc: "Scholars & Active Peer Network"
+  const categories = useMemo(() => {
+    const all = [
+      { 
+        id: "admin" as CategoryId, 
+        title: "Administrators", 
+        count: stats.admin,
+        icon: <ShieldCheck className="w-6 h-6" />,
+        color: "#ef4444",
+        bgClass: "from-red-500/20 to-transparent",
+        desc: "Governance & Systems Control"
+      },
+      { 
+        id: "professor" as CategoryId, 
+        title: "Academic Faculty", 
+        count: stats.professor,
+        icon: <UserCircle className="w-6 h-6" />,
+        color: "#a855f7",
+        bgClass: "from-purple-500/20 to-transparent",
+        desc: "Subject Experts & Mentors"
+      },
+      { 
+        id: "student" as CategoryId, 
+        title: "Students Hub", 
+        count: stats.student,
+        icon: <GraduationCap className="w-6 h-6" />,
+        color: "#06b6d4",
+        bgClass: "from-cyan-500/20 to-transparent",
+        desc: "Scholars & Active Peer Network"
+      }
+    ];
+
+    // Students cannot see the student category list
+    if (userData?.role === 'student') {
+      return all.filter(c => c.id !== 'student');
     }
-  ];
+    return all;
+  }, [stats, userData]);
 
   const normalizeDept = (dept: string) => {
     if (!dept) return "GLOBAL";
@@ -115,27 +137,28 @@ export default function CommunityPage() {
           
           if (!name || !email) continue;
 
-          const baseData: any = {
-            displayName: name,
-            email: email,
+          const profileData: any = {
             role: selectedCategory,
             department: normalizeDept(deptRaw),
-            password: "Password123!", // Temp password for imports
           };
 
           if (selectedCategory === "professor") {
-            baseData.section = row[parseInt(importMapping.sectionCol) - 1]?.toString().trim() || "";
-            baseData.classAdvisorId = row[parseInt(importMapping.advisorCol) - 1]?.toString().trim() || "";
+            profileData.section = row[parseInt(importMapping.sectionCol) - 1]?.toString().trim() || "";
+            profileData.classAdvisorId = row[parseInt(importMapping.advisorCol) - 1]?.toString().trim() || "";
             const subStr = row[parseInt(importMapping.subjectsCol) - 1]?.toString() || "";
-            baseData.subjectsTaught = subStr.split(',').map(s => s.trim()).filter(s => s !== "");
+            profileData.subjectsTaught = subStr.split(',').map((s: string) => s.trim()).filter((s: string) => s !== "");
           }
 
           if (selectedCategory === "student") {
-            baseData.section = row[parseInt(importMapping.sectionCol) - 1]?.toString().trim() || "";
-            baseData.advisorName = row[parseInt(importMapping.advisorCol) - 1]?.toString().trim() || "";
+            profileData.section = row[parseInt(importMapping.sectionCol) - 1]?.toString().trim() || "";
+            const advisorName = row[parseInt(importMapping.advisorCol) - 1]?.toString().trim() || "";
+            // Find professor by name if possible, otherwise store as provided
+            const matchedProf = professors.find((p: any) => p.displayName?.toLowerCase() === advisorName.toLowerCase());
+            profileData.advisorId = matchedProf?.uid || "";
+            profileData.advisorName = matchedProf?.displayName || advisorName;
           }
 
-          await adminCreateUser(baseData);
+          await adminCreateUser(email, "Password123!", name, profileData);
           successful.push(email);
         } catch (err) {
           failed.push(row[parseInt(importMapping.emailCol) - 1]);
@@ -148,7 +171,7 @@ export default function CommunityPage() {
     reader.onload = async (evt) => {
       let data: any[] = [];
       if (importFile.name.endsWith('.csv')) {
-        const results = Papa.parse(evt.target?.result as string, { header: false });
+        const results = Papa.parse(evt.target?.result as string, { header: false, skipEmptyLines: true });
         data = results.data;
       } else {
         const workbook = XLSX.read(evt.target?.result, { type: 'binary' });
@@ -156,11 +179,45 @@ export default function CommunityPage() {
         data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
       }
 
-      // Skip header row if needed (usually true)
-      await processData(data.slice(1));
+      const rows = data.slice(1);
+      
+      // Perform Validation if not already validated
+      if (!validationReport) {
+        const missingSubs = new Set<string>();
+        const badAdvisors = new Set<string>();
+        
+        rows.forEach(row => {
+          if (selectedCategory === "professor") {
+            const subs = row[parseInt(importMapping.subjectsCol) - 1]?.toString().split(',').map((s: string) => s.trim()) || [];
+            subs.forEach((s: string) => {
+              if (s && !allSubjects.find((sub: any) => sub.code === s || sub.alias === s)) {
+                missingSubs.add(s);
+              }
+            });
+          }
+          if (selectedCategory === "student") {
+            const advisorName = row[parseInt(importMapping.advisorCol) - 1]?.toString().trim() || "";
+            if (advisorName && !professors.find((p: any) => p.displayName?.toLowerCase() === advisorName.toLowerCase())) {
+              badAdvisors.add(advisorName);
+            }
+          }
+        });
+
+        if (missingSubs.size > 0 || badAdvisors.size > 0) {
+          setValidationReport({ 
+            missingSubjects: Array.from(missingSubs), 
+            invalidAdvisors: Array.from(badAdvisors) 
+          });
+          setIsImporting(false);
+          return;
+        }
+      }
+
+      await processData(rows);
       setIsImporting(false);
       setShowImportModal(false);
       setImportFile(null);
+      setValidationReport(null);
     };
 
     if (importFile.name.endsWith('.csv')) {
@@ -203,12 +260,34 @@ export default function CommunityPage() {
               />
             </div>
             {userData?.role === 'admin' && (
-              <button 
-                onClick={() => setShowImportModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.05] transition-all text-xs font-bold uppercase tracking-widest"
-              >
-                 <Upload className="w-4 h-4" /> Import
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    setEditUser({
+                      displayName: "",
+                      email: "",
+                      role: selectedCategory,
+                      department: "",
+                      section: "",
+                      subjectsTaught: [],
+                      classAdvisorId: "",
+                      advisorId: "",
+                      advisorName: ""
+                    });
+                    setIsAddingNew(true);
+                    setShowManageModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-black rounded-xl hover:bg-cyan-400 transition-all text-xs font-bold uppercase tracking-widest"
+                >
+                  <UserPlus className="w-4 h-4" /> Add Member
+                </button>
+                <button 
+                  onClick={() => { setIsAddingNew(false); setShowImportModal(true); }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.05] transition-all text-xs font-bold uppercase tracking-widest"
+                >
+                  <Upload className="w-4 h-4" /> Import
+                </button>
+              </div>
             )}
             <button className="p-2.5 bg-white/[0.03] border border-white/[0.08] rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.05] transition-all">
                <Download className="w-4 h-4" />
@@ -225,7 +304,8 @@ export default function CommunityPage() {
                   <th className="px-6 py-4 w-[5%] border-r border-white/[0.04] text-center"><Hash className="w-3 h-3 mx-auto" /></th>
                   <th className="px-6 py-4 w-[20%] border-r border-white/[0.04]">Full Legal Name</th>
                   <th className="px-6 py-4 w-[20%] border-r border-white/[0.04]">Institutional Email</th>
-                  <th className="px-6 py-4 w-[12%] border-r border-white/[0.04]">Dept & Sec</th>
+                  <th className="px-6 py-4 w-[10%] border-r border-white/[0.04]">Dept</th>
+                  <th className="px-6 py-4 w-[5%] border-r border-white/[0.04] text-center">Sec</th>
                   {selectedCategory === "professor" ? (
                     <>
                       <th className="px-6 py-4 w-[15%] border-r border-white/[0.04]">Advisor Of</th>
@@ -234,8 +314,12 @@ export default function CommunityPage() {
                   ) : selectedCategory === "student" ? (
                     <th className="px-6 py-4 w-[25%] border-r border-white/[0.04]">Assigned Class Advisor</th>
                   ) : null}
-                  <th className="px-6 py-4 w-[10%] border-r border-white/[0.04] text-center">Lifecycle</th>
-                  <th className="px-6 py-4 w-[10%] text-center">Manage</th>
+                  {userData?.role !== 'student' && (
+                    <>
+                      <th className="px-6 py-4 w-[10%] border-r border-white/[0.04] text-center">Lifecycle</th>
+                      <th className="px-6 py-4 w-[10%] text-center">Manage</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
@@ -258,9 +342,11 @@ export default function CommunityPage() {
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-xs font-mono text-gray-500 group-hover/row:text-gray-300 transition-colors truncate">
                         {u.email}
                       </td>
-                      <td className="px-6 py-3.5 border-r border-white/[0.04]">
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
                         <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">{u.department || "GLOBAL"}</span>
-                        {u.section && <span className="ml-1 text-[10px] text-gray-600">-{u.section}</span>}
+                      </td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
+                        <span className="text-xs font-bold text-gray-400">{u.section || "—"}</span>
                       </td>
 
                       {selectedCategory === "professor" ? (
@@ -284,16 +370,27 @@ export default function CommunityPage() {
                         </td>
                       ) : null}
 
-                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
-                        <div className="flex justify-center">
-                          <div className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black uppercase text-emerald-400 tracking-widest">Active</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                           <button className="p-1.5 hover:bg-white/5 rounded text-gray-600 hover:text-white transition-colors"><MoreHorizontal className="w-4 h-4" /></button>
-                        </div>
-                      </td>
+                      {userData?.role !== 'student' && (
+                        <>
+                          <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
+                            <div className="flex justify-center">
+                              <div className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black uppercase text-emerald-400 tracking-widest">Active</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                               {userData?.role === 'admin' && (
+                                 <button 
+                                   onClick={() => { setEditUser(u); setShowManageModal(true); }}
+                                   className="p-1.5 hover:bg-white/5 rounded text-gray-500 hover:text-cyan-400 transition-colors"
+                                 >
+                                   <MoreHorizontal className="w-4 h-4" />
+                                 </button>
+                               )}
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))
                 )}
@@ -406,17 +503,244 @@ export default function CommunityPage() {
                     )}
                   </div>
 
+                  {validationReport && (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-widest">
+                        <ShieldAlert className="w-4 h-4" /> Integrity Report
+                      </div>
+                      
+                      {validationReport.missingSubjects.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-amber-500/80 font-bold">UNRECOGNIZED SUBJECT CODES:</p>
+                          <div className="flex flex-wrap gap-1">
+                             {validationReport.missingSubjects.map(s => <span key={s} className="bg-amber-500/20 px-1.5 py-0.5 rounded text-[9px] text-amber-200">{s}</span>)}
+                          </div>
+                          <p className="text-[9px] text-amber-500/60 leading-none mt-1">Please create these subjects in Timetable first for proper linking.</p>
+                        </div>
+                      )}
+
+                      {validationReport.invalidAdvisors.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-amber-500/80 font-bold">UNKNOWN ADVISOR NAMES:</p>
+                          <div className="flex flex-wrap gap-1">
+                             {validationReport.invalidAdvisors.map(a => <span key={a} className="bg-amber-500/20 px-1.5 py-0.5 rounded text-[9px] text-amber-200">{a}</span>)}
+                          </div>
+                          <p className="text-[9px] text-amber-500/60 leading-none mt-1">These will be stored as text only. Linking requires pre-existing accounts.</p>
+                        </div>
+                      )}
+                      
+                      <p className="text-[10px] text-gray-500 italic pt-2">Click below again to proceed anyway with partial linking.</p>
+                    </div>
+                  )}
+
                   <button 
                     disabled={!importFile || isImporting}
-                    className="w-full bg-white text-black font-black uppercase tracking-[0.2em] py-4 rounded-2xl hover:bg-white/90 disabled:bg-white/10 disabled:text-white/20 transition-all flex items-center justify-center gap-3 shadow-xl"
+                    className={`w-full font-black uppercase tracking-[0.2em] py-4 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl ${
+                      validationReport ? "bg-amber-500 text-black hover:bg-amber-400" : "bg-white text-black hover:bg-white/90"
+                    } disabled:bg-white/10 disabled:text-white/20`}
                   >
                     {isImporting ? (
                       <>Processing Data Structure...</>
                     ) : (
-                      <>Execute Batch Transaction</>
+                      <>
+                        {validationReport ? "Acknowledge & Sync" : "Execute Batch Transaction"}
+                      </>
                     )}
                   </button>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Manage Member Modal */}
+        <AnimatePresence>
+          {showManageModal && editUser && (
+            <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md bg-[#0a0a0a] border border-white/[0.1] rounded-[2rem] p-8 shadow-2xl relative"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    {isAddingNew ? <UserPlus className="w-5 h-5 text-cyan-400" /> : <UserCircle className="w-5 h-5 text-cyan-400" />}
+                    {isAddingNew ? "Direct Enrollment" : "Manage Member"}
+                  </h3>
+                  <button onClick={() => { setShowManageModal(false); setIsAddingNew(false); }} className="text-gray-500 hover:text-white"><X className="w-5 h-5"/></button>
+                </div>
+
+                <div className="space-y-4">
+                   <div className="space-y-1.5">
+                      <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Full Name</label>
+                      <input type="text" value={editUser.displayName} onChange={e => setEditUser({...editUser, displayName: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50" placeholder="e.g. Dr. Alaric Vance" />
+                   </div>
+                   <div className="space-y-1.5">
+                      <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Institutional Email</label>
+                      <input type="email" value={editUser.email} onChange={e => setEditUser({...editUser, email: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50" placeholder="user@campus.edu" />
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Department</label>
+                        <select 
+                          value={editUser.department || ""} 
+                          onChange={e => setEditUser({...editUser, department: e.target.value})}
+                          className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
+                        >
+                          <option value="">Select Dept</option>
+                          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Section</label>
+                        <select 
+                          value={editUser.section || ""} 
+                          onChange={e => setEditUser({...editUser, section: e.target.value})}
+                          className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
+                        >
+                          <option value="">No Section</option>
+                          {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                   </div>
+                   {editUser.role === 'professor' && (
+                     <>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Advisor Of (Active Class)</label>
+                          <select 
+                            value={editUser.classAdvisorId || ""} 
+                            onChange={e => setEditUser({...editUser, classAdvisorId: e.target.value})}
+                            className="w-full bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
+                          >
+                            <option value="" className="bg-[#0a0a0a]">No Class Advisor Assigned</option>
+                            {activeClassDocs.map((c: any) => (
+                              <option key={c.id} value={c.id} className="bg-[#0a0a0a]">
+                                {c.department}-{c.section} | Sem {c.semester}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Subjects Allotment</label>
+                          <div className="flex flex-wrap gap-2 mb-2 p-2 bg-white/[0.02] border border-white/[0.05] rounded-xl min-h-[44px]">
+                            {(editUser.subjectsTaught || []).length === 0 && <span className="text-xs text-gray-600 italic px-1 pt-1">No subjects linked yet...</span>}
+                            {(editUser.subjectsTaught || []).map((sCode: string) => (
+                              <div key={sCode} className="flex items-center gap-1 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] px-2 py-0.5 rounded-lg group/tag">
+                                 {sCode}
+                                 <button 
+                                   onClick={() => setEditUser({...editUser, subjectsTaught: editUser.subjectsTaught.filter((x: string) => x !== sCode)})}
+                                   className="hover:text-red-400 transition-colors"
+                                 >
+                                   <X className="w-2.5 h-2.5" />
+                                 </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="relative group/subsearch">
+                            <input 
+                              type="text" 
+                              placeholder="Search Subject Name/Code..." 
+                              value={subSearch}
+                              onChange={e => setSubSearch(e.target.value)}
+                              className="w-full bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 text-sm"
+                            />
+                            {subSearch && (
+                               <div className="absolute z-10 w-full mt-1 bg-[#0f0f0f] border border-white/10 rounded-xl max-h-40 overflow-y-auto shadow-2xl flex flex-col">
+                                 {allSubjects.filter((s: any) => 
+                                   s.name.toLowerCase().includes(subSearch.toLowerCase()) || 
+                                   s.code.toLowerCase().includes(subSearch.toLowerCase())
+                                 ).map((s: any) => (
+                                   <button 
+                                     key={s.id} 
+                                     onClick={() => {
+                                       const current = editUser.subjectsTaught || [];
+                                       if (!current.includes(s.code)) {
+                                         setEditUser({...editUser, subjectsTaught: [...current, s.code]});
+                                       }
+                                       setSubSearch("");
+                                     }}
+                                     className="px-4 py-2 text-left text-xs text-gray-300 hover:bg-white/5 hover:text-white border-b border-white/[0.03]"
+                                   >
+                                     <span className="font-bold text-cyan-400 mr-2">{s.code}</span> {s.name}
+                                   </button>
+                                 ))}
+                                 {allSubjects.filter((s: any) => s.name.toLowerCase().includes(subSearch.toLowerCase())).length === 0 && (
+                                   <div className="p-3 text-[10px] text-gray-600 italic">No matching subjects...</div>
+                                 )}
+                               </div>
+                            )}
+                          </div>
+                        </div>
+                     </>
+                   )}
+                   {editUser.role === 'student' && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Assign Class Advisor (Faculty)</label>
+                        <div className="relative group/advsearch">
+                          <input 
+                            type="text" 
+                            placeholder={editUser.advisorName || "Search Faculty Name..."} 
+                            value={advSearch}
+                            onChange={e => setAdvSearch(e.target.value)}
+                            className="w-full bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 text-sm"
+                          />
+                          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+                          {advSearch && (
+                             <div className="absolute z-10 w-full mt-1 bg-[#0f0f0f] border border-white/10 rounded-xl max-h-40 overflow-y-auto shadow-2xl flex flex-col">
+                               {professors.filter((p: any) => p.displayName.toLowerCase().includes(advSearch.toLowerCase())).map((p: any) => (
+                                 <button 
+                                   key={p.uid} 
+                                   onClick={() => {
+                                     setEditUser({...editUser, advisorId: p.uid, advisorName: p.displayName});
+                                     setAdvSearch("");
+                                   }}
+                                   className="px-4 py-2 text-left text-xs text-gray-300 hover:bg-white/5 hover:text-white border-b border-white/[0.03]"
+                                 >
+                                   <div className="font-bold">{p.displayName}</div>
+                                   <div className="text-[10px] text-gray-500">{p.department} Faculty</div>
+                                 </button>
+                               ))}
+                               {professors.filter((p: any) => p.displayName.toLowerCase().includes(advSearch.toLowerCase())).length === 0 && (
+                                 <div className="p-3 text-[10px] text-gray-600 italic">No professors found...</div>
+                               )}
+                             </div>
+                          )}
+                        </div>
+                      </div>
+                   )}
+
+                   <div className="pt-4 flex flex-col gap-3">
+                      <button 
+                        onClick={async () => {
+                          if (isAddingNew) {
+                            await adminCreateUser(editUser.email, "Password123!", editUser.displayName, editUser);
+                          } else {
+                            await update(editUser.uid || editUser.id, editUser);
+                          }
+                          setShowManageModal(false);
+                          setIsAddingNew(false);
+                        }}
+                        className="w-full bg-cyan-500 text-black font-bold py-3 rounded-xl hover:bg-cyan-400 transition-all flex items-center justify-center gap-2"
+                      >
+                         {isAddingNew ? <UserPlus className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                         {isAddingNew ? "Confirm Enrollment" : "Save Changes"}
+                      </button>
+                      {!isAddingNew && (
+                        <button 
+                          onClick={async () => {
+                            if (confirm("Are you sure you want to delete this member? This cannot be undone.")) {
+                              await remove(editUser.uid || editUser.id);
+                              setShowManageModal(false);
+                            }
+                          }}
+                          className="w-full bg-red-500/10 text-red-500 border border-red-500/20 font-bold py-3 rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
+                        >
+                           <Trash2 className="w-4 h-4" /> Delete Account
+                        </button>
+                      )}
+                   </div>
+                </div>
               </motion.div>
             </div>
           )}
