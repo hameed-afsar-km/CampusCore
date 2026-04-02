@@ -55,6 +55,7 @@ export default function TimetablePage() {
 
   const isAdmin = userData?.role === "admin";
   const isProfessor = userData?.role === "professor";
+  const canEdit = isAdmin || isProfessor;
   const isStudent = userData?.role === "student";
 
   const [viewMode, setViewMode] = useState<"class"|"faculty">("class");
@@ -78,8 +79,21 @@ export default function TimetablePage() {
   });
 
   const filteredSubjects = useMemo(() => {
-    return allSubjects.filter(s => s.department === viewDept && s.section === viewSection);
-  }, [allSubjects, viewDept, viewSection]);
+    // Find all class IDs for the selected dept+section
+    const matchingClassIds = new Set(
+      activeClassDocs
+        .filter((c: any) => c.department === viewDept && c.section === viewSection)
+        .map((c: any) => c.id)
+    );
+
+    return allSubjects.filter(s => {
+      // Include if linked to a matching class
+      if (s.classId && matchingClassIds.has(s.classId)) return true;
+      // Include if department matches and no section filter (GLOBAL or matching section)
+      if (s.department === viewDept && (!s.section || s.section === "GLOBAL" || s.section === viewSection)) return true;
+      return false;
+    });
+  }, [allSubjects, viewDept, viewSection, activeClassDocs]);
 
   const timetableData = useMemo(() => {
     if (viewMode === "class") {
@@ -98,14 +112,14 @@ export default function TimetablePage() {
     return grouped;
   }, [timetableData]);
 
-  const canEdit = (dept: string, sec: string) => {
+  const checkPermission = (dept: string, sec: string) => {
     if (isAdmin) return true;
     if (isProfessor && userData?.department === dept) return true;
     return false;
   };
 
   const toggleSlotSelection = (day: DayOfWeek, slotId: string) => {
-    if (!canEdit(viewDept, viewSection)) return;
+    if (!checkPermission(viewDept, viewSection)) return;
     
     // Check if slot is occupied
     const slotObj = TIME_SLOTS.find(s => s.id === slotId);
@@ -205,7 +219,7 @@ export default function TimetablePage() {
             {isStudent ? `${userData.department} - Section ${userData.section}` : "View & allocate academic schedules"}
           </p>
         </div>
-        {(isAdmin || isProfessor) && viewMode === "class" && canEdit(viewDept, viewSection) && (
+        {(isAdmin || isProfessor) && viewMode === "class" && checkPermission(viewDept, viewSection) && (
           <div className="flex gap-2">
             {selectedSlots.length > 0 && (
                <>
@@ -291,7 +305,7 @@ export default function TimetablePage() {
       <div className="dash-card overflow-hidden !p-0 mb-8">
           <div className="p-4 border-b border-white/[0.06] flex justify-between items-center bg-white/[0.01]">
             <h3 className="font-bold text-gray-200">Schedule Grid</h3>
-            {(isAdmin || isProfessor) && viewMode === "class" && canEdit(viewDept, viewSection) && (
+            {(isAdmin || isProfessor) && viewMode === "class" && checkPermission(viewDept, viewSection) && (
               <button onClick={() => { setClassForm({ ...classForm, department: viewDept, section: viewSection, room: "", subjectId: "" }); setEditingId(null); setShowClassModal(true); }} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1"><Plus className="w-3.5 h-3.5"/> Assign Slot</button>
             )}
           </div>
@@ -363,7 +377,7 @@ export default function TimetablePage() {
                               {slotClasses.length > 0 ? (
                                 <div className="flex flex-col gap-1 h-full min-h-[100px]">
                                   {slotClasses.map((c: any, cIdx: number) => {
-                                    const editable = canEdit(c.department || "", c.section || "");
+                                    const editable = checkPermission(c.department || "", c.section || "");
                                     
                                     // Robust color selection: Slot color -> Subject color -> Default purple
                                     const masterSub = allSubjects.find(s => s.id === c.subjectId);
@@ -424,7 +438,7 @@ export default function TimetablePage() {
                                   })}
                                 </div>
                               ) : (
-                                !isStudent && viewMode === "class" && canEdit(viewDept, viewSection) && (
+                                !isStudent && viewMode === "class" && checkPermission(viewDept, viewSection) && (
                                   <div className={`w-full h-full min-h-[40px] flex items-center justify-center transition-all ${isSlotSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                                     {isSlotSelected ? <div className="w-4 h-4 rounded-full bg-cyan-500 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.8)]"><Plus className="w-3 h-3 text-black" /></div> : <Plus className="w-4 h-4 text-gray-500" />}
                                   </div>

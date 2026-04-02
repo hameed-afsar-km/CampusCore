@@ -11,7 +11,7 @@ export async function restoreAdminRecord(uid: string, email: string, name: strin
       email,
       displayName: name,
       role: "admin",
-      department: "GLOABL ADMINISTRATION",
+      department: "GLOBAL",
       photoURL: "",
       createdAt: serverTimestamp(),
     });

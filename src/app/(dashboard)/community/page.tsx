@@ -6,7 +6,7 @@ import {
   Users, GraduationCap, ShieldCheck, UserCircle, ArrowLeft, 
   Search, Mail, Building2, LayoutGrid, ChevronRight, 
   Filter, Download, MoreHorizontal, Hash, Upload, X, Check,
-  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert, Key
+  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert, Key, RotateCcw, Plus, Users2, Settings, QrCode, Tag
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
@@ -19,7 +19,7 @@ type CategoryId = "admin" | "professor" | "student";
 export default function CommunityPage() {
   const { userData, adminCreateUser, adminResetPassword } = useAuth();
   const { data: users, loading, update, remove } = useFirestore<any>("users", false);
-  const { data: allSubjects } = useFirestore<any>("subjects", false);
+  const { data: allSubjects, add: addSubject } = useFirestore<any>("subjects", false);
   const { data: activeClassDocs } = useFirestore<any>("classes", false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,6 +49,16 @@ export default function CommunityPage() {
   });
   const [isImporting, setIsImporting] = useState(false);
   const [validationReport, setValidationReport] = useState<{ missingSubjects: string[], invalidAdvisors: string[] } | null>(null);
+
+  // Student specific state
+  const [studentView, setStudentView] = useState<'friends' | 'faculties'>('friends');
+  const [inviteCodeInput, setInviteCodeInput] = useState("");
+  const [showCollabSettings, setShowCollabSettings] = useState(false);
+
+  // General specific state
+  const [popupSubject, setPopupSubject] = useState<{code: string, name: string} | null>(null);
+  const [newSubjectCode, setNewSubjectCode] = useState("");
+  const [newSubjectName, setNewSubjectName] = useState("");
 
   const stats = useMemo(() => {
     return {
@@ -99,13 +109,12 @@ export default function CommunityPage() {
       }
     ];
 
-    // Students cannot see the student category list
-    if (userData?.role === 'student') {
-      return all.filter(c => c.id !== 'student');
-    }
-    // Professors and Admins see all
+    // Students cannot see the student category list, actually they have a completely different UI
+    // handled later in the return
     return all;
   }, [stats, userData]);
+
+
 
   const normalizeDept = (dept: string) => {
     if (!dept) return "GLOBAL";
@@ -299,14 +308,14 @@ export default function CommunityPage() {
         {/* Excel Style Sheet */}
         <div className="bg-[#050505] border border-white/[0.06] rounded-2xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
+            <table className="w-full text-left border-collapse">
               <thead className="bg-[#0a0a0a] border-b border-white/[0.08] text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
                 <tr>
                   <th className="px-6 py-4 w-[5%] border-r border-white/[0.04] text-center"><Hash className="w-3 h-3 mx-auto" /></th>
                   <th className="px-6 py-4 w-[20%] border-r border-white/[0.04]">Full Legal Name</th>
                   <th className="px-6 py-4 w-[20%] border-r border-white/[0.04]">Institutional Email</th>
                   <th className="px-6 py-4 w-[10%] border-r border-white/[0.04]">Dept</th>
-                  <th className="px-6 py-4 w-[5%] border-r border-white/[0.04] text-center">Sec</th>
+                  {selectedCategory === "student" && <th className="px-6 py-4 border-r border-white/[0.04] text-center">Sec</th>}
                   {selectedCategory === "professor" ? (
                     <>
                       <th className="px-6 py-4 w-[15%] border-r border-white/[0.04]">Advisor Of</th>
@@ -347,13 +356,17 @@ export default function CommunityPage() {
                         {u.email}
                       </td>
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
-                        <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">{u.department || "GLOBAL"}</span>
-                      </td>
-                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
-                        <span className="text-xs font-bold text-gray-400">
-                           {u.role === 'professor' ? (u.department || "GLOBAL") : (u.section || "—")}
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">
+                          {u.role === 'admin' ? "GLOBAL" : (u.department || "GLOBAL")}
                         </span>
                       </td>
+                      {selectedCategory === "student" && (
+                        <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
+                          <span className="text-xs font-bold text-gray-400">
+                             {u.section || "—"}
+                          </span>
+                        </td>
+                      )}
 
                       {selectedCategory === "professor" ? (
                         <>
@@ -363,16 +376,26 @@ export default function CommunityPage() {
                                 <UserCheck className="w-3 h-3" /> 
                                 {(() => {
                                   const cls = activeClassDocs.find((c: any) => c.id === u.classAdvisorId);
-                                  return cls ? `${cls.department}-${cls.section} (Sem ${cls.semester})` : "Class Allotted";
+                                  return cls ? `${cls.department}-${cls.section} (Year ${Math.ceil(cls.semester / 2) || 1})` : "Class Allotted";
                                 })()}
                               </div>
                             ) : <span className="text-[10px] text-gray-700 italic">No Class Assigned</span>}
                           </td>
                           <td className="px-6 py-3.5 border-r border-white/[0.04]">
                              <div className="flex flex-wrap gap-1">
-                               {(u.subjectsTaught || []).slice(0, 2).map((s: string, i: number) => (
-                                 <span key={i} className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400">{s}</span>
-                               ))}
+                               {(u.subjectsTaught || []).slice(0, 2).map((sCode: string, i: number) => {
+                                 const sub = allSubjects.find((s:any) => s.code === sCode || s.alias === sCode);
+                                 return (
+                                   <button 
+                                     key={i} 
+                                     onClick={() => setPopupSubject({ code: sCode, name: sub?.name || 'Unknown Subject' })}
+                                     className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                                     title="Click for details"
+                                   >
+                                     {sCode}
+                                   </button>
+                                 );
+                               })}
                                {(u.subjectsTaught || []).length > 2 && <span className="text-[9px] text-gray-600">+{u.subjectsTaught.length - 2} more</span>}
                                {(u.subjectsTaught || []).length === 0 && <span className="text-[10px] text-gray-700 italic">None</span>}
                              </div>
@@ -603,7 +626,7 @@ export default function CommunityPage() {
                         <select 
                           value={editUser.department || ""} 
                           onChange={e => setEditUser({...editUser, department: e.target.value})}
-                          className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
+                          className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
                         >
                           <option value="">Select Dept</option>
                           {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -615,7 +638,7 @@ export default function CommunityPage() {
                           <select 
                             value={editUser.section || ""} 
                             onChange={e => setEditUser({...editUser, section: e.target.value})}
-                            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
+                            className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
                           >
                             <option value="">No Section</option>
                             {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -640,7 +663,7 @@ export default function CommunityPage() {
                            <select 
                              value={editUser.classAdvisorId || ""} 
                              onChange={(e) => setEditUser({ ...editUser, classAdvisorId: e.target.value })}
-                             className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl p-3 text-sm outline-none transition-all"
+                             className="w-full bg-[#050505] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl p-3 text-sm outline-none transition-all [&>option]:bg-[#050505] [&>option]:text-white"
                            >
                               <option value="" className="bg-[#0a0e17]">Select Class to Allot Advisory...</option>
                               {activeClassDocs.map((cls: any) => (
@@ -695,9 +718,42 @@ export default function CommunityPage() {
                                      <span className="font-bold text-cyan-400 mr-2">{s.code}</span> {s.name}
                                    </button>
                                  ))}
-                                 {allSubjects.filter((s: any) => s.name.toLowerCase().includes(subSearch.toLowerCase())).length === 0 && (
-                                   <div className="p-3 text-[10px] text-gray-600 italic">No matching subjects...</div>
-                                 )}
+                                  {allSubjects.filter((s: any) => s.name.toLowerCase().includes(subSearch.toLowerCase()) || s.code.toLowerCase().includes(subSearch.toLowerCase())).length === 0 && (
+                                    <div className="p-3 bg-white/[0.02] border-t border-white/[0.05]">
+                                      <p className="text-[10px] text-gray-600 italic mb-2">No matching subjects found.</p>
+                                      <div className="space-y-2 mb-2">
+                                        <input type="text" placeholder="Subject Code (e.g. CS101)" value={newSubjectCode} onChange={e => setNewSubjectCode(e.target.value.toUpperCase().replace(/\s/g,''))} className="w-full bg-[#050505] border border-white/[0.08] rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500/50" />
+                                        <input type="text" placeholder="Subject Name" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} className="w-full bg-[#050505] border border-white/[0.08] rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500/50" />
+                                      </div>
+                                      <button 
+                                        disabled={!newSubjectCode || !newSubjectName}
+                                        onClick={async () => {
+                                          const newSubCode = newSubjectCode;
+                                          const newSub = {
+                                            code: newSubCode,
+                                            name: newSubjectName,
+                                            department: editUser.department || "GLOBAL",
+                                            subjectType: "Theory",
+                                            credits: 3,
+                                            facultyId: editUser.uid || editUser.id || "",
+                                            facultyName: editUser.displayName,
+                                            color: "purple"
+                                          };
+                                          await addSubject(newSub);
+                                          const current = editUser.subjectsTaught || [];
+                                          if (!current.includes(newSubCode)) {
+                                            setEditUser({...editUser, subjectsTaught: [...current, newSubCode]});
+                                          }
+                                          setSubSearch("");
+                                          setNewSubjectCode("");
+                                          setNewSubjectName("");
+                                        }}
+                                        className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-cyan-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <Plus className="w-3 h-3" /> Create & Assign
+                                      </button>
+                                    </div>
+                                  )}
                                </div>
                             )}
                           </div>
@@ -748,6 +804,26 @@ export default function CommunityPage() {
                           } else {
                             await update(editUser.uid || editUser.id, editUser);
                           }
+
+                          // Auto-Create Missing Subjects Logic
+                          if (editUser.role === 'professor' && (editUser.subjectsTaught || []).length > 0) {
+                            for (const sCode of editUser.subjectsTaught) {
+                              const subjectExists = allSubjects.find((s: any) => s.code === sCode);
+                              if (!subjectExists) {
+                                await addSubject({
+                                  code: sCode,
+                                  name: `${sCode} (Auto-Generated)`,
+                                  department: editUser.department || "GENERAL",
+                                  subjectType: "Theory",
+                                  credits: 3,
+                                  facultyId: editUser.uid || editUser.id || "",
+                                  facultyName: editUser.displayName,
+                                  color: "purple"
+                                });
+                              }
+                            }
+                          }
+
                           setShowManageModal(false);
                           setIsAddingNew(false);
                         }}
@@ -788,10 +864,310 @@ export default function CommunityPage() {
             </div>
           )}
         </AnimatePresence>
+
+        {/* Subject Detail Pop-up */}
+        <AnimatePresence>
+          {popupSubject && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+               <motion.div 
+                 initial={{ opacity: 0, scale: 0.9 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 exit={{ opacity: 0, scale: 0.9 }}
+                 className="w-full max-w-sm bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 shadow-2xl relative"
+               >
+                 <button onClick={() => setPopupSubject(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X className="w-4 h-4"/></button>
+                 <div className="flex items-center gap-3 mb-2">
+                   <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center"><BookOpen className="w-5 h-5"/></div>
+                   <div>
+                     <h3 className="text-xl font-black text-white">{popupSubject.code}</h3>
+                     <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Subject Reference</p>
+                   </div>
+                 </div>
+                 <div className="mt-4 p-4 bg-white/[0.03] border border-white/[0.05] rounded-xl text-center">
+                   <p className="text-sm font-medium text-gray-200">{popupSubject.name}</p>
+                 </div>
+               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
       </div>
     );
   }
 
+  // ==== STUDENT VIEW ====
+  if (userData?.role === 'student') {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-white/[0.05]">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
+              <Users2 className="w-6 h-6 text-cyan-400" />
+              Community & Collaboration
+            </h1>
+            <p className="text-gray-500 text-xs mt-0.5 tracking-wide uppercase font-black">Student Network Hub</p>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setStudentView('friends')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                studentView === 'friends' ? 'bg-cyan-500 text-black' : 'bg-white/[0.03] border border-white/[0.08] text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              Friends
+            </button>
+            <button 
+              onClick={() => setStudentView('faculties')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                studentView === 'faculties' ? 'bg-cyan-500 text-black' : 'bg-white/[0.03] border border-white/[0.08] text-gray-400 hover:text-white hover:bg-white/[0.05]'
+              }`}
+            >
+              All Faculties
+            </button>
+            <button 
+              onClick={() => setShowCollabSettings(true)}
+              className="px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-xl text-gray-400 hover:text-white hover:bg-white/[0.05] transition-all"
+              title="Visibility Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {studentView === 'faculties' && (
+          <div className="bg-[#050505] border border-white/[0.06] rounded-2xl overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-white/[0.08] bg-white/[0.01]">
+               <h3 className="text-sm font-bold text-gray-300">Academic Faculty Directory</h3>
+            </div>
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#0a0a0a] border-b border-white/[0.08] text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
+                  <tr>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Faculty Name</th>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Department</th>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Subjects Taught</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {professors.map((p: any) => (
+                    <tr key={p.uid} className="hover:bg-cyan-500/[0.02] group/row transition-all duration-150">
+                      <td className="px-6 py-3.5 border-r border-white/[0.04]">
+                        <div className="flex items-center gap-3">
+                           <div className="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] font-bold text-gray-400 font-mono">
+                             {p.displayName?.[0] || "?"}
+                           </div>
+                           <span className="text-sm font-semibold text-gray-200">{p.displayName}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-xs font-bold text-gray-400 uppercase">
+                        {p.department || "GLOBAL"}
+                      </td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04]">
+                        <div className="flex flex-wrap gap-1">
+                          {(p.subjectsTaught || []).map((sCode: string, i: number) => {
+                             const sub = allSubjects.find((s:any) => s.code === sCode || s.alias === sCode);
+                             return (
+                               <button 
+                                 key={i} 
+                                 onClick={() => setPopupSubject({ code: sCode, name: sub?.name || 'Unknown Subject' })}
+                                 className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                               >
+                                 {sCode}
+                               </button>
+                             );
+                          })}
+                          {(p.subjectsTaught || []).length === 0 && <span className="text-[10px] text-gray-700 italic">None</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {professors.length === 0 && (
+                    <tr><td colSpan={3} className="px-6 py-12 text-center text-xs text-gray-600 italic">No faculty members found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {studentView === 'friends' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Invite & Add Friends Section */}
+            <div className="lg:col-span-1 space-y-6">
+               <div className="bg-[#050505] p-6 rounded-2xl border border-white/[0.06] shadow-xl space-y-6">
+                 <div>
+                   <h3 className="font-bold text-white flex items-center gap-2 text-lg"><QrCode className="w-5 h-5 text-purple-400" /> Share Invite Code</h3>
+                   <p className="text-xs text-gray-500 mt-1">Generate a code to invite friends.</p>
+                 </div>
+                 <div className="bg-white/[0.02] border border-white/[0.08] rounded-xl p-4 text-center">
+                   {userData?.inviteCode ? (
+                     <div className="space-y-3">
+                       <div className="text-3xl font-black text-white tracking-[0.2em]">{userData.inviteCode}</div>
+                       <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest">Active Code</p>
+                     </div>
+                   ) : (
+                     <button 
+                       onClick={() => update(userData.uid, { inviteCode: Math.random().toString(36).substring(2, 8).toUpperCase() })}
+                       className="px-4 py-2 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-purple-500/20 transition-colors w-full"
+                     >
+                       Generate Code
+                     </button>
+                   )}
+                 </div>
+               </div>
+
+               <div className="bg-[#050505] p-6 rounded-2xl border border-white/[0.06] shadow-xl space-y-4">
+                 <div>
+                   <h3 className="font-bold text-white flex items-center gap-2 text-lg"><UserPlus className="w-5 h-5 text-cyan-400" /> Accept Invite</h3>
+                   <p className="text-xs text-gray-500 mt-1">Enter a friend's code to connect.</p>
+                 </div>
+                 <div className="flex gap-2">
+                   <input 
+                     type="text" 
+                     placeholder="Enter 6-digit code..." 
+                     value={inviteCodeInput}
+                     onChange={e => setInviteCodeInput(e.target.value.toUpperCase())}
+                     className="flex-1 bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 text-sm tracking-widest uppercase font-mono"
+                   />
+                   <button 
+                     onClick={async () => {
+                       if (!inviteCodeInput) return;
+                       const match = users.find((u: any) => u.inviteCode === inviteCodeInput && u.uid !== userData.uid);
+                       if (match) {
+                         const myFriends = userData?.friends || [];
+                         const theirFriends = match.friends || [];
+                         if (!myFriends.includes(match.uid)) {
+                           await update(userData.uid, { friends: [...myFriends, match.uid] });
+                           await update(match.uid, { friends: [...theirFriends, userData.uid] });
+                           setInviteCodeInput("");
+                           alert(`Connected with ${match.displayName}!`);
+                         } else {
+                           alert("Already connected with this user.");
+                         }
+                       } else {
+                         alert("Invalid or expired code.");
+                       }
+                     }}
+                     className="px-4 bg-cyan-500 text-black font-bold uppercase text-[10px] tracking-widest rounded-xl hover:bg-cyan-400 transition-colors"
+                   >
+                     Connect
+                   </button>
+                 </div>
+               </div>
+            </div>
+
+            {/* Friends List Section */}
+            <div className="lg:col-span-2 bg-[#050505] border border-white/[0.06] rounded-2xl overflow-hidden shadow-xl flex flex-col">
+              <div className="p-4 border-b border-white/[0.08] bg-white/[0.01] flex justify-between items-center">
+                 <h3 className="font-bold text-white flex items-center gap-2 text-lg"><Users className="w-5 h-5 text-emerald-400" /> Your Network</h3>
+                 <span className="text-xs text-gray-500 italic">{(userData?.friends || []).length} Connections</span>
+              </div>
+              <div className="p-4 flex-1 overflow-y-auto">
+                 {(!userData?.friends || userData.friends.length === 0) ? (
+                   <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
+                     <div className="w-16 h-16 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center">
+                       <Users2 className="w-8 h-8 text-gray-600" />
+                     </div>
+                     <div>
+                       <p className="text-gray-400 font-medium">No connections yet.</p>
+                       <p className="text-xs text-gray-600 mt-1">Share your code or accept a friend's code to start collaborating.</p>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {users.filter((u:any) => (userData.friends || []).includes(u.uid)).map((friend: any) => (
+                       <div key={friend.uid} className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-4 flex items-center gap-4 hover:border-white/[0.1] transition-all group">
+                         <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold font-mono">
+                           {friend.displayName?.[0] || "?"}
+                         </div>
+                         <div className="flex-1 min-w-0">
+                           <h4 className="text-sm font-bold text-white truncate">{friend.displayName}</h4>
+                           <p className="text-[10px] text-gray-500 truncate">{friend.department || "General"} • {friend.section || ""}</p>
+                         </div>
+                         {/* We can envision a future button to view profile/collaboration stuff here */}
+                         <button className="w-8 h-8 rounded-full bg-white/[0.05] flex items-center justify-center text-gray-400 opacity-0 group-hover:opacity-100 transition-all hover:text-white hover:bg-white/[0.1]">
+                           <ChevronRight className="w-4 h-4" />
+                         </button>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Settings Modal */}
+        <AnimatePresence>
+          {showCollabSettings && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+               <motion.div 
+                 initial={{ opacity: 0, scale: 0.9 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 exit={{ opacity: 0, scale: 0.9 }}
+                 className="w-full max-w-sm bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 shadow-2xl relative"
+               >
+                 <button onClick={() => setShowCollabSettings(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X className="w-4 h-4"/></button>
+                 <div className="mb-6">
+                   <h3 className="text-xl font-black text-white flex items-center gap-2"><Settings className="w-5 h-5 text-gray-400" /> Visibility Settings</h3>
+                   <p className="text-xs text-gray-500 mt-1">Control what your network can see.</p>
+                 </div>
+                 
+                 <div className="space-y-3">
+                   {['tasks', 'events', 'notes', 'marks', 'attendance'].map((settingKey) => {
+                     const isEnabled = userData?.visibilitySettings?.[settingKey] !== false; // Default true
+                     return (
+                       <div key={settingKey} className="flex items-center justify-between p-3 bg-white/[0.03] border border-white/[0.05] rounded-xl">
+                         <span className="text-sm text-gray-300 capitalize">{settingKey}</span>
+                         <button 
+                           onClick={() => {
+                             const current = userData?.visibilitySettings || {};
+                             update(userData.uid, { visibilitySettings: { ...current, [settingKey]: !isEnabled } });
+                           }}
+                           className={`w-10 h-5 rounded-full p-0.5 transition-colors ${isEnabled ? 'bg-emerald-500' : 'bg-gray-700'}`}
+                         >
+                           <div className={`w-4 h-4 rounded-full bg-white transform transition-transform ${isEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                         </button>
+                       </div>
+                     );
+                   })}
+                 </div>
+               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Re-using Popup Subject for Faculty View too */}
+        <AnimatePresence>
+          {popupSubject && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+               <motion.div 
+                 initial={{ opacity: 0, scale: 0.9 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 exit={{ opacity: 0, scale: 0.9 }}
+                 className="w-full max-w-sm bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 shadow-2xl relative"
+               >
+                 <button onClick={() => setPopupSubject(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X className="w-4 h-4"/></button>
+                 <div className="flex items-center gap-3 mb-2">
+                   <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center"><BookOpen className="w-5 h-5"/></div>
+                   <div>
+                     <h3 className="text-xl font-black text-white">{popupSubject.code}</h3>
+                     <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Subject Reference</p>
+                   </div>
+                 </div>
+                 <div className="mt-4 p-4 bg-white/[0.03] border border-white/[0.05] rounded-xl text-center">
+                   <p className="text-sm font-medium text-gray-200">{popupSubject.name}</p>
+                 </div>
+               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+      </div>
+    );
+  }
+
+  // ==== ORIGINAL VIEW FOR OTHERS ====
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center space-y-12 py-10">
       <div className="text-center space-y-4 max-w-xl mx-auto">

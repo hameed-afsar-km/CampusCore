@@ -38,6 +38,16 @@ export interface UserData {
   staffId?: string;
   photoURL?: string;
   createdAt?: Date;
+  inviteCode?: string;
+  friends?: string[];
+  visibilitySettings?: {
+    tasks: boolean;
+    events: boolean;
+    notes: boolean;
+    marks: boolean;
+    attendance: boolean;
+    [key: string]: boolean;
+  };
 }
 
 interface AuthContextType {
