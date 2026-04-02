@@ -350,13 +350,23 @@ export default function CommunityPage() {
                         <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">{u.department || "GLOBAL"}</span>
                       </td>
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
-                        <span className="text-xs font-bold text-gray-400">{u.section || "—"}</span>
+                        <span className="text-xs font-bold text-gray-400">
+                           {u.role === 'professor' ? (u.department || "GLOBAL") : (u.section || "—")}
+                        </span>
                       </td>
 
                       {selectedCategory === "professor" ? (
                         <>
                           <td className="px-6 py-3.5 border-r border-white/[0.04]">
-                            {u.classAdvisorId ? <div className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded border border-cyan-400/10 w-fit"><UserCheck className="w-3 h-3" /> {u.classAdvisorId}</div> : <span className="text-[10px] text-gray-700 italic">No Class Assigned</span>}
+                            {u.classAdvisorId ? (
+                              <div className="flex items-center gap-1.5 text-xs text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded border border-cyan-400/10 w-fit">
+                                <UserCheck className="w-3 h-3" /> 
+                                {(() => {
+                                  const cls = activeClassDocs.find((c: any) => c.id === u.classAdvisorId);
+                                  return cls ? `${cls.department}-${cls.section} (Sem ${cls.semester})` : "Class Allotted";
+                                })()}
+                              </div>
+                            ) : <span className="text-[10px] text-gray-700 italic">No Class Assigned</span>}
                           </td>
                           <td className="px-6 py-3.5 border-r border-white/[0.04]">
                              <div className="flex flex-wrap gap-1">
@@ -599,34 +609,47 @@ export default function CommunityPage() {
                           {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Section</label>
-                        <select 
-                          value={editUser.section || ""} 
-                          onChange={e => setEditUser({...editUser, section: e.target.value})}
-                          className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
-                        >
-                          <option value="">No Section</option>
-                          {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
+                      {editUser.role === 'student' && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Section</label>
+                          <select 
+                            value={editUser.section || ""} 
+                            onChange={e => setEditUser({...editUser, section: e.target.value})}
+                            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
+                          >
+                            <option value="">No Section</option>
+                            {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      )}
                    </div>
                    {editUser.role === 'professor' && (
-                     <>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Advisor Of (Active Class)</label>
-                          <select 
-                            value={editUser.classAdvisorId || ""} 
-                            onChange={e => setEditUser({...editUser, classAdvisorId: e.target.value})}
-                            className="w-full bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50"
-                          >
-                            <option value="" className="bg-[#0a0a0a]">No Class Advisor Assigned</option>
-                            {activeClassDocs.map((c: any) => (
-                              <option key={c.id} value={c.id} className="bg-[#0a0a0a]">
-                                {c.department}-{c.section} | Sem {c.semester}
-                              </option>
-                            ))}
-                          </select>
+                      <>
+                        <div className="space-y-4 py-4 border-y border-white/[0.05] my-4">
+                           <div className="flex items-center justify-between">
+                              <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Class Advisory Assignment</label>
+                              {editUser.classAdvisorId && (
+                                 <button 
+                                   onClick={() => setEditUser({ ...editUser, classAdvisorId: "" })}
+                                   className="text-[9px] text-red-500 hover:text-red-400 font-bold uppercase tracking-widest bg-red-500/5 px-2 py-0.5 rounded border border-red-500/10 transition-colors"
+                                 >
+                                   Remove Advisory
+                                 </button>
+                              )}
+                           </div>
+                           <select 
+                             value={editUser.classAdvisorId || ""} 
+                             onChange={(e) => setEditUser({ ...editUser, classAdvisorId: e.target.value })}
+                             className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl p-3 text-sm outline-none transition-all"
+                           >
+                              <option value="" className="bg-[#0a0e17]">Select Class to Allot Advisory...</option>
+                              {activeClassDocs.map((cls: any) => (
+                                 <option key={cls.id} value={cls.id} className="bg-[#0a0e17]">
+                                    {cls.department} - {cls.section} | Semester {cls.semester}
+                                 </option>
+                              ))}
+                           </select>
+                           <p className="text-[10px] text-gray-600 italic px-1">Note: The Advisor manages the attendance and records for this specific class section.</p>
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Subjects Allotment</label>

@@ -66,20 +66,14 @@ export default function UsersPage() {
     setError("");
     try {
       if (adminCreateUser) {
-        const newUid = await adminCreateUser(email, password, name, role, department, section, staffId);
-
-        const extraPayload: any = {};
-        if (role === "student" && classId) {
-          extraPayload.classId = classId;
-        }
+        const metadata: any = { role, department, section, staffId };
+        if (role === "student" && classId) metadata.classId = classId;
         if (role === "professor") {
-          if (classAdvisorId) extraPayload.classAdvisorId = classAdvisorId;
-          if (subjectsTaught.length > 0) extraPayload.subjectsTaught = subjectsTaught;
+          if (classAdvisorId) metadata.classAdvisorId = classAdvisorId;
+          if (subjectsTaught.length > 0) metadata.subjectsTaught = subjectsTaught;
         }
 
-        if (Object.keys(extraPayload).length > 0) {
-          await updateDoc(doc(db, "users", newUid), extraPayload);
-        }
+        await adminCreateUser(email, password, name, metadata);
       }
       setShowModal(false);
       setName(""); setEmail(""); setPassword(""); setRole("student");
@@ -419,12 +413,20 @@ export default function UsersPage() {
                           {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
-                        <select value={editSection} onChange={e => setEditSection(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
-                          {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
+                      {editingUser.role === "student" && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1.5">Section</label>
+                          <select value={editSection} onChange={e => setEditSection(e.target.value)} className="w-full bg-[#0a0a0a] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-4 py-2.5 text-sm outline-none transition-all text-white">
+                            {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {editingUser.role === "professor" && (
+                         <div>
+                           <label className="block text-sm font-medium text-gray-300 mb-1.5">Staff ID</label>
+                           <input type="text" value={editingUser.staffId || ""} disabled className="w-full bg-white/[0.01] border border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-gray-500 opacity-80 cursor-not-allowed" />
+                         </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1.5">Class Advisor (Optional)</label>

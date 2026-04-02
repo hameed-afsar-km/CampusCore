@@ -54,13 +54,10 @@ interface AuthContextType {
     section?: string
   ) => Promise<void>;
   adminCreateUser: (
-    email: string,
-    password: string,
-    name: string,
-    role: UserRole,
-    department?: string,
-    section?: string,
-    staffId?: string
+    email: string, 
+    password: string, 
+    name: string, 
+    metadata: Partial<UserData>
   ) => Promise<string>;
   adminResetPassword: (email: string, newPassword: string) => Promise<void>;
   signInGoogle: (role: UserRole) => Promise<void>;
@@ -156,26 +153,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name: string,
-    role: UserRole,
-    department?: string,
-    section?: string,
-    staffId?: string
+    metadata: Partial<UserData>
   ): Promise<string> => {
     if (!secondaryAuth) throw new Error("Secondary auth not initialized.");
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     await updateProfile(cred.user, { displayName: name });
 
     const userDataObj: any = {
+      ...metadata,
       uid: cred.user.uid,
       email: cred.user.email,
       displayName: name,
-      role,
       photoURL: cred.user.photoURL || "",
       createdAt: serverTimestamp(),
     };
-    if (department) userDataObj.department = department;
-    if (section) userDataObj.section = section;
-    if (staffId) userDataObj.staffId = staffId;
 
     await setDoc(doc(db, "users", cred.user.uid), userDataObj);
 
