@@ -28,7 +28,8 @@ export default function AttendancePage() {
     if (!userData || userData.role !== 'student') return [];
     return allSubjects.filter((s: any) => 
       s.department === userData.department && 
-      s.semester === userData.semester
+      s.semester === userData.semester &&
+      (s.section === userData.section || !s.section) // Allow global subjects or section-specific ones
     );
   }, [allSubjects, userData]);
 

@@ -39,6 +39,7 @@ interface AuthPageProps {
   setPassword?: (val: string) => void;
   showPassword?: boolean;
   setShowPassword?: (val: boolean) => void;
+  children?: React.ReactNode;
 }
 
 export function AuthPage({
@@ -53,8 +54,7 @@ export function AuthPage({
   setName,
   password,
   setPassword,
-  showPassword,
-  setShowPassword
+  children
 }: AuthPageProps) {
   return (
     <main className="relative md:h-screen md:overflow-hidden lg:grid lg:grid-cols-2 bg-[#02050e]">
@@ -65,13 +65,11 @@ export function AuthPage({
 
       {/* Right Side: Form */}
       <div className="relative flex min-h-screen flex-col justify-center p-6 md:p-10">
-        {/* Responsive Background Glows */}
         <div aria-hidden className="absolute inset-0 isolate contain-strict -z-10 opacity-30">
           <div className="absolute top-0 right-0 h-96 w-96 -translate-y-1/2 translate-x-1/3 rounded-full bg-purple-600/20 blur-[120px]" />
           <div className="absolute bottom-0 left-0 h-96 w-96 translate-y-1/3 -translate-x-1/3 rounded-full bg-cyan-600/10 blur-[100px]" />
         </div>
 
-        {/* Home Navigation */}
         <Button variant="ghost" className="absolute top-8 left-8 text-gray-400 hover:text-white" asChild>
           <Link href="/">
             <ChevronLeftIcon className='size-4 me-2' />
@@ -80,13 +78,7 @@ export function AuthPage({
         </Button>
 
         <div className="mx-auto w-full max-w-md p-8 rounded-[2.5rem] glass-card relative overflow-hidden">
-          {/* Internal Glow */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 blur-3xl -z-10" />
-
-          {/* Mobile Logo */}
-          <div className="flex items-center gap-3 lg:hidden mb-8">
-            <p className="text-2xl font-bold tracking-tight text-white shimmer-text">CampusCore</p>
-          </div>
 
           <div className="flex flex-col space-y-2 text-center sm:text-left mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-white leading-tight">
@@ -103,7 +95,6 @@ export function AuthPage({
             </div>
           </div>
 
-          {/* Error Message */}
           {error && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }} 
@@ -204,6 +195,8 @@ export function AuthPage({
             )}
           </p>
 
+          {children}
+
           <p className="text-[10px] text-gray-600 text-center mt-10 leading-relaxed max-w-[280px] mx-auto opacity-50 uppercase tracking-widest">
             Protected by CampusCore Security
           </p>
@@ -212,8 +205,6 @@ export function AuthPage({
     </main>
   );
 }
-
-
 
 const GoogleIcon = (props: React.ComponentProps<'svg'>) => (
   <svg

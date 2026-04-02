@@ -16,6 +16,7 @@ import {
   GoogleAuthProvider,
   signOut,
   updateProfile,
+  updatePassword,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, secondaryAuth, db } from "@/lib/firebase";
@@ -61,6 +62,7 @@ interface AuthContextType {
     section?: string,
     staffId?: string
   ) => Promise<string>;
+  adminResetPassword: (email: string, newPassword: string) => Promise<void>;
   signInGoogle: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -182,6 +184,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return cred.user.uid;
   };
 
+  const adminResetPassword = async (email: string, newPassword: string) => {
+    if (!secondaryAuth) throw new Error("Secondary auth not initialized.");
+    
+    // We can't directly reset password without old password in many SDKs, 
+    // but in Firebase Admin/Secondary Auth we can sign in and update
+    // Note: This requires the admin to know the current password OR 
+    // more typically, we'd use a Cloud Function. 
+    // Since we are using secondaryAuth client-side for "Admin" actions:
+    try {
+      const cred = await signInWithEmailAndPassword(secondaryAuth, email, "Password123!"); // Default at creation
+      await updatePassword(cred.user, newPassword);
+      await signOut(secondaryAuth);
+    } catch (e) {
+      // If default fails, we might need a reset link, but this bypasses for new imports
+      throw new Error("Reset failed. User might have changed default credentials.");
+    }
+  };
+
   const signInGoogle = async (role: UserRole) => {
     const result = await signInWithPopup(auth, googleProvider);
     
@@ -224,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInEmail,
         signUpEmail,
         adminCreateUser,
+        adminResetPassword,
         signInGoogle,
         logout,
       }}

@@ -403,7 +403,9 @@ export default function TimetablePage() {
                                         )}
                                         
                                         {viewMode === "class" ? (
-                                          <div className="text-[10px] text-gray-400 truncate mt-1 w-full" title={c.facultyName}>{c.facultyName || "TBA"}</div>
+                                          <div className={`text-[10px] truncate mt-1 w-full font-medium ${colorTheme.text}`} title={c.facultyName}>
+                                            {c.facultyName || "TBA"}
+                                          </div>
                                         ) : (
                                           <div className="text-[10px] text-gray-400 truncate mt-1">{c.department}-{c.section}</div>
                                         )}

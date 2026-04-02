@@ -6,7 +6,7 @@ import {
   Users, GraduationCap, ShieldCheck, UserCircle, ArrowLeft, 
   Search, Mail, Building2, LayoutGrid, ChevronRight, 
   Filter, Download, MoreHorizontal, Hash, Upload, X, Check,
-  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert
+  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert, Key
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
@@ -17,7 +17,7 @@ import Papa from 'papaparse';
 type CategoryId = "admin" | "professor" | "student";
 
 export default function CommunityPage() {
-  const { userData, adminCreateUser } = useAuth();
+  const { userData, adminCreateUser, adminResetPassword } = useAuth();
   const { data: users, loading, update, remove } = useFirestore<any>("users", false);
   const { data: allSubjects } = useFirestore<any>("subjects", false);
   const { data: activeClassDocs } = useFirestore<any>("classes", false);
@@ -103,6 +103,7 @@ export default function CommunityPage() {
     if (userData?.role === 'student') {
       return all.filter(c => c.id !== 'student');
     }
+    // Professors and Admins see all
     return all;
   }, [stats, userData]);
 
@@ -314,11 +315,14 @@ export default function CommunityPage() {
                   ) : selectedCategory === "student" ? (
                     <th className="px-6 py-4 w-[25%] border-r border-white/[0.04]">Assigned Class Advisor</th>
                   ) : null}
-                  {userData?.role !== 'student' && (
+                  {userData?.role === 'admin' && (
                     <>
                       <th className="px-6 py-4 w-[10%] border-r border-white/[0.04] text-center">Lifecycle</th>
                       <th className="px-6 py-4 w-[10%] text-center">Manage</th>
                     </>
+                  )}
+                  {userData?.role === 'professor' && (
+                    <th className="px-6 py-4 w-[10%] text-center">Status</th>
                   )}
                 </tr>
               </thead>
@@ -370,7 +374,7 @@ export default function CommunityPage() {
                         </td>
                       ) : null}
 
-                      {userData?.role !== 'student' && (
+                      {userData?.role === 'admin' && (
                         <>
                           <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
                             <div className="flex justify-center">
@@ -379,17 +383,20 @@ export default function CommunityPage() {
                           </td>
                           <td className="px-6 py-3.5 text-center">
                             <div className="flex items-center justify-center gap-2">
-                               {userData?.role === 'admin' && (
-                                 <button 
-                                   onClick={() => { setEditUser(u); setShowManageModal(true); }}
-                                   className="p-1.5 hover:bg-white/5 rounded text-gray-500 hover:text-cyan-400 transition-colors"
-                                 >
-                                   <MoreHorizontal className="w-4 h-4" />
-                                 </button>
-                               )}
+                               <button 
+                                 onClick={() => { setEditUser(u); setShowManageModal(true); setIsAddingNew(false); }}
+                                 className="p-1.5 hover:bg-white/5 rounded text-gray-500 hover:text-cyan-400 transition-colors"
+                               >
+                                 <MoreHorizontal className="w-4 h-4" />
+                               </button>
                             </div>
                           </td>
                         </>
+                      )}
+                      {userData?.role === 'professor' && (
+                        <td className="px-6 py-3.5 text-center">
+                           <div className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black uppercase text-emerald-400 tracking-widest w-fit mx-auto">Verified</div>
+                        </td>
                       )}
                     </tr>
                   ))
@@ -727,17 +734,30 @@ export default function CommunityPage() {
                          {isAddingNew ? "Confirm Enrollment" : "Save Changes"}
                       </button>
                       {!isAddingNew && (
-                        <button 
-                          onClick={async () => {
-                            if (confirm("Are you sure you want to delete this member? This cannot be undone.")) {
-                              await remove(editUser.uid || editUser.id);
-                              setShowManageModal(false);
-                            }
-                          }}
-                          className="w-full bg-red-500/10 text-red-500 border border-red-500/20 font-bold py-3 rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
-                        >
-                           <Trash2 className="w-4 h-4" /> Delete Account
-                        </button>
+                        <>
+                          <button 
+                            onClick={async () => {
+                              if (confirm(`Force reset password for ${editUser.displayName}? This will set it to 'CampusCore@123'`)) {
+                                await adminResetPassword(editUser.email, "CampusCore@123");
+                                alert("Password has been reset to: CampusCore@123");
+                              }
+                            }}
+                            className="w-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold py-3 rounded-xl hover:bg-amber-500/20 transition-all flex items-center justify-center gap-2"
+                          >
+                             <Key className="w-4 h-4" /> Reset to Default Credentials
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              if (confirm("Are you sure you want to delete this member? This cannot be undone.")) {
+                                await remove(editUser.uid || editUser.id);
+                                setShowManageModal(false);
+                              }
+                            }}
+                            className="w-full bg-red-500/10 text-red-500 border border-red-500/20 font-bold py-3 rounded-xl hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
+                          >
+                             <Trash2 className="w-4 h-4" /> Delete Account
+                          </button>
+                        </>
                       )}
                    </div>
                 </div>

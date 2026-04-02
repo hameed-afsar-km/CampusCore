@@ -23,7 +23,7 @@ export function useFirestore<T extends { id?: string }>(
   collectionName: string,
   userSpecific: boolean = true
 ) {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -38,7 +38,10 @@ export function useFirestore<T extends { id?: string }>(
     const colRef = collection(db, collectionName);
     let q = query(colRef, orderBy("createdAt", "desc"));
 
-    if (userSpecific && user) {
+    // Admins always see everything
+    const isAdmin = userData?.role === 'admin';
+
+    if (userSpecific && user && !isAdmin) {
       q = query(
         colRef, 
         or(
