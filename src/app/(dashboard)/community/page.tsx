@@ -14,12 +14,12 @@ import { DEPARTMENTS, SECTIONS } from "@/lib/constants";
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
-type CategoryId = "admin" | "professor" | "student";
+type CategoryId = "admin" | "professor" | "student" | "subjects";
 
 export default function CommunityPage() {
   const { userData, adminCreateUser, adminResetPassword } = useAuth();
   const { data: users, loading, update, remove } = useFirestore<any>("users", false);
-  const { data: allSubjects, add: addSubject } = useFirestore<any>("subjects", false);
+  const { data: allSubjects, add: addSubject, remove: removeSubject } = useFirestore<any>("subjects", false);
   const { data: activeClassDocs } = useFirestore<any>("classes", false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,13 +106,23 @@ export default function CommunityPage() {
         color: "#06b6d4",
         bgClass: "from-cyan-500/20 to-transparent",
         desc: "Scholars & Active Peer Network"
+      },
+      { 
+        id: "subjects" as CategoryId, 
+        title: "Academic Subjects", 
+        count: allSubjects.length,
+        icon: <BookOpen className="w-6 h-6" />,
+        color: "#f59e0b",
+        bgClass: "from-amber-500/20 to-transparent",
+        desc: "Curriculum Repository"
       }
     ];
 
-    // Students cannot see the student category list, actually they have a completely different UI
-    // handled later in the return
-    return all;
-  }, [stats, userData]);
+    if (userData?.role === "student") {
+      return all.filter(c => c.id === "student");
+    }
+    return userData?.role === "admin" ? all : all.filter(c => c.id !== "subjects");
+  }, [stats, userData, allSubjects]);
 
 
 
@@ -305,7 +315,41 @@ export default function CommunityPage() {
           </div>
         </div>
 
-        {/* Excel Style Sheet */}
+        {selectedCategory === "subjects" ? (
+          <div className="bg-[#050505] border border-white/[0.06] rounded-2xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#0a0a0a] border-b border-white/[0.08] text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
+                  <tr>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Code</th>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Name</th>
+                    <th className="px-6 py-4 border-r border-white/[0.04] text-center">Credits</th>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Type / Dept</th>
+                    <th className="px-6 py-4 border-white/[0.04] text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {allSubjects.map((s: any) => (
+                    <tr key={s.id} className="hover:bg-amber-500/[0.02] transition-colors">
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] font-bold text-cyan-400">{s.code}</td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-sm text-gray-200">{s.name}</td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-center text-sm font-bold text-gray-400">{s.credits}</td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-xs font-medium text-gray-500">{s.subjectType} / {s.department || "GLOBAL"}</td>
+                      <td className="px-6 py-3.5 border-white/[0.04] text-right">
+                          <button onClick={() => { if(confirm('Are you sure you want to delete this subject?')) { removeSubject(s.id); } }} className="p-1.5 text-gray-500 hover:text-red-400">
+                            <Trash2 className="w-4 h-4"/>
+                          </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {allSubjects.length === 0 && (
+                    <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-xs">No subjects found in the curriculum.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
         <div className="bg-[#050505] border border-white/[0.06] rounded-2xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
@@ -383,16 +427,17 @@ export default function CommunityPage() {
                           </td>
                           <td className="px-6 py-3.5 border-r border-white/[0.04]">
                              <div className="flex flex-wrap gap-1">
-                               {(u.subjectsTaught || []).slice(0, 2).map((sCode: string, i: number) => {
-                                 const sub = allSubjects.find((s:any) => s.code === sCode || s.alias === sCode);
+                               {(u.subjectsTaught || []).slice(0, 2).map((sCodeRaw: string, i: number) => {
+                                 const parsedCode = sCodeRaw.includes(" ") ? sCodeRaw.split(" ")[0] : sCodeRaw;
+                                 const sub = allSubjects.find((s:any) => s.code === parsedCode || s.alias === parsedCode);
                                  return (
                                    <button 
                                      key={i} 
-                                     onClick={() => setPopupSubject({ code: sCode, name: sub?.name || 'Unknown Subject' })}
-                                     className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                                     onClick={() => setPopupSubject({ code: parsedCode, name: sub?.name || sCodeRaw })}
+                                     className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer max-w-[80px] truncate"
                                      title="Click for details"
                                    >
-                                     {sCode}
+                                     {parsedCode}
                                    </button>
                                  );
                                })}
@@ -445,6 +490,7 @@ export default function CommunityPage() {
              <div className="text-[10px] text-gray-600 font-mono italic">Secure Context • CampusCore Infrastructure v2.1</div>
           </div>
         </div>
+        )}
 
         {/* Import Modal */}
         <AnimatePresence>
@@ -693,68 +739,77 @@ export default function CommunityPage() {
                           <div className="relative group/subsearch">
                             <input 
                               type="text" 
-                              placeholder="Search Subject Name/Code..." 
-                              value={subSearch}
-                              onChange={e => setSubSearch(e.target.value)}
+                              placeholder="Subject Code (e.g. CSD101)" 
+                              value={newSubjectCode}
+                              onChange={e => setNewSubjectCode(e.target.value.toUpperCase().replace(/\s/g,''))}
                               className="w-full bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 text-sm"
                             />
-                            {subSearch && (
-                               <div className="absolute z-10 w-full mt-1 bg-[#0f0f0f] border border-white/10 rounded-xl max-h-40 overflow-y-auto shadow-2xl flex flex-col">
-                                 {allSubjects.filter((s: any) => 
-                                   s.name.toLowerCase().includes(subSearch.toLowerCase()) || 
-                                   s.code.toLowerCase().includes(subSearch.toLowerCase())
-                                 ).map((s: any) => (
-                                   <button 
-                                     key={s.id} 
-                                     onClick={() => {
-                                       const current = editUser.subjectsTaught || [];
-                                       if (!current.includes(s.code)) {
-                                         setEditUser({...editUser, subjectsTaught: [...current, s.code]});
-                                       }
-                                       setSubSearch("");
-                                     }}
-                                     className="px-4 py-2 text-left text-xs text-gray-300 hover:bg-white/5 hover:text-white border-b border-white/[0.03]"
-                                   >
-                                     <span className="font-bold text-cyan-400 mr-2">{s.code}</span> {s.name}
-                                   </button>
-                                 ))}
-                                  {allSubjects.filter((s: any) => s.name.toLowerCase().includes(subSearch.toLowerCase()) || s.code.toLowerCase().includes(subSearch.toLowerCase())).length === 0 && (
-                                    <div className="p-3 bg-white/[0.02] border-t border-white/[0.05]">
-                                      <p className="text-[10px] text-gray-600 italic mb-2">No matching subjects found.</p>
-                                      <div className="space-y-2 mb-2">
-                                        <input type="text" placeholder="Subject Code (e.g. CS101)" value={newSubjectCode} onChange={e => setNewSubjectCode(e.target.value.toUpperCase().replace(/\s/g,''))} className="w-full bg-[#050505] border border-white/[0.08] rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500/50" />
-                                        <input type="text" placeholder="Subject Name" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} className="w-full bg-[#050505] border border-white/[0.08] rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500/50" />
-                                      </div>
-                                      <button 
-                                        disabled={!newSubjectCode || !newSubjectName}
-                                        onClick={async () => {
-                                          const newSubCode = newSubjectCode;
-                                          const newSub = {
-                                            code: newSubCode,
-                                            name: newSubjectName,
-                                            department: editUser.department || "GLOBAL",
-                                            subjectType: "Theory",
-                                            credits: 3,
-                                            facultyId: editUser.uid || editUser.id || "",
-                                            facultyName: editUser.displayName,
-                                            color: "purple"
-                                          };
-                                          await addSubject(newSub);
-                                          const current = editUser.subjectsTaught || [];
-                                          if (!current.includes(newSubCode)) {
-                                            setEditUser({...editUser, subjectsTaught: [...current, newSubCode]});
-                                          }
-                                          setSubSearch("");
-                                          setNewSubjectCode("");
-                                          setNewSubjectName("");
-                                        }}
-                                        className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-cyan-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                      >
-                                        <Plus className="w-3 h-3" /> Create & Assign
-                                      </button>
-                                    </div>
-                                  )}
-                               </div>
+                            {newSubjectCode && (
+                              <div className="mt-2 space-y-2">
+                                {(() => {
+                                  const matches = allSubjects.filter((s:any) => s.code.includes(newSubjectCode));
+                                  if (matches.length > 0) {
+                                     return (
+                                       <div className="bg-[#0f0f0f] border border-white/10 rounded-xl overflow-hidden shadow-2xl flex flex-col max-h-40 overflow-y-auto">
+                                         {matches.map((s:any) => (
+                                           <button 
+                                             key={s.id} 
+                                             onClick={() => {
+                                               const current = editUser.subjectsTaught || [];
+                                               if (!current.includes(s.code)) setEditUser({...editUser, subjectsTaught: [...current, s.code]});
+                                               setNewSubjectCode("");
+                                             }}
+                                             className="px-4 py-2 text-left text-xs text-gray-300 hover:bg-white/5 hover:text-white border-b border-white/[0.03]"
+                                           >
+                                             <span className="font-bold text-cyan-400 mr-2">{s.code}</span> {s.name}
+                                           </button>
+                                         ))}
+                                       </div>
+                                     );
+                                  }
+
+                                  const exactMatch = allSubjects.find((s:any) => s.code === newSubjectCode);
+                                  if (!exactMatch) {
+                                     return (
+                                       <div className="p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
+                                          <p className="text-[10px] text-gray-500 mb-2 uppercase tracking-widest font-bold">New Subject</p>
+                                          <input 
+                                            type="text" 
+                                            placeholder="Subject Name" 
+                                            value={newSubjectName} 
+                                            onChange={e => setNewSubjectName(e.target.value)} 
+                                            className="w-full bg-[#050505] border border-white/[0.08] rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500/50 mb-2"
+                                          />
+                                          <button 
+                                            disabled={!newSubjectName}
+                                            onClick={async () => {
+                                              const newSubCode = newSubjectCode;
+                                              const newSub = {
+                                                code: newSubCode,
+                                                name: newSubjectName,
+                                                department: editUser.department || "GLOBAL",
+                                                subjectType: "Theory",
+                                                credits: 3,
+                                                facultyId: editUser.uid || editUser.id || "",
+                                                facultyName: editUser.displayName,
+                                              };
+                                              await addSubject(newSub);
+                                              const current = editUser.subjectsTaught || [];
+                                              if (!current.includes(newSubCode)) {
+                                                setEditUser({...editUser, subjectsTaught: [...current, newSubCode]});
+                                              }
+                                              setNewSubjectCode("");
+                                              setNewSubjectName("");
+                                            }}
+                                            className="w-full py-2 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-cyan-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            <Plus className="w-3 h-3" /> Create & Assign
+                                          </button>
+                                       </div>
+                                     );
+                                  }
+                                })()}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -879,12 +934,12 @@ export default function CommunityPage() {
                  <div className="flex items-center gap-3 mb-2">
                    <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center"><BookOpen className="w-5 h-5"/></div>
                    <div>
-                     <h3 className="text-xl font-black text-white">{popupSubject.code}</h3>
+                     <h3 className="text-xl font-black text-white break-all">{popupSubject.code}</h3>
                      <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Subject Reference</p>
                    </div>
                  </div>
-                 <div className="mt-4 p-4 bg-white/[0.03] border border-white/[0.05] rounded-xl text-center">
-                   <p className="text-sm font-medium text-gray-200">{popupSubject.name}</p>
+                 <div className="mt-4 p-4 bg-white/[0.03] border border-white/[0.05] rounded-xl text-center overflow-hidden">
+                   <p className="text-sm font-medium text-gray-200 break-words whitespace-normal">{popupSubject.name}</p>
                  </div>
                </motion.div>
             </div>
@@ -949,41 +1004,58 @@ export default function CommunityPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
-                  {professors.map((p: any) => (
-                    <tr key={p.uid} className="hover:bg-cyan-500/[0.02] group/row transition-all duration-150">
-                      <td className="px-6 py-3.5 border-r border-white/[0.04]">
-                        <div className="flex items-center gap-3">
-                           <div className="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] font-bold text-gray-400 font-mono">
-                             {p.displayName?.[0] || "?"}
-                           </div>
-                           <span className="text-sm font-semibold text-gray-200">{p.displayName}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-3.5 border-r border-white/[0.04] text-xs font-bold text-gray-400 uppercase">
-                        {p.department || "GLOBAL"}
-                      </td>
-                      <td className="px-6 py-3.5 border-r border-white/[0.04]">
-                        <div className="flex flex-wrap gap-1">
-                          {(p.subjectsTaught || []).map((sCode: string, i: number) => {
-                             const sub = allSubjects.find((s:any) => s.code === sCode || s.alias === sCode);
-                             return (
-                               <button 
-                                 key={i} 
-                                 onClick={() => setPopupSubject({ code: sCode, name: sub?.name || 'Unknown Subject' })}
-                                 className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-                               >
-                                 {sCode}
-                               </button>
-                             );
-                          })}
-                          {(p.subjectsTaught || []).length === 0 && <span className="text-[10px] text-gray-700 italic">None</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {professors.length === 0 && (
-                    <tr><td colSpan={3} className="px-6 py-12 text-center text-xs text-gray-600 italic">No faculty members found.</td></tr>
-                  )}
+                  {(() => {
+                    const myClassIds = activeClassDocs.filter((c: any) => c.department === userData?.department && c.section === userData?.section).map((c: any) => c.id);
+                    const mySubjects = allSubjects.filter((s:any) => s.classId && myClassIds.includes(s.classId));
+                    const myFacultyIds = new Set(mySubjects.map((s:any) => s.facultyId).filter(Boolean));
+                    const filteredProfessors = professors.filter((p:any) => myFacultyIds.has(p.uid) || myFacultyIds.has(p.id));
+
+                    if (filteredProfessors.length === 0) {
+                      return <tr><td colSpan={3} className="px-6 py-12 text-center text-xs text-gray-600 italic">No faculty members assigned to your class yet.</td></tr>;
+                    }
+
+                    return filteredProfessors.map((p: any) => (
+                      <tr key={p.uid} className="hover:bg-cyan-500/[0.02] group/row transition-all duration-150">
+                        <td className="px-6 py-3.5 border-r border-white/[0.04]">
+                          <div className="flex items-center gap-3">
+                             <div className="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[10px] font-bold text-gray-400 font-mono">
+                               {p.displayName?.[0] || "?"}
+                             </div>
+                             <span className="text-sm font-semibold text-gray-200">{p.displayName}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3.5 border-r border-white/[0.04] text-xs font-bold text-gray-400 uppercase">
+                          {p.department || "GLOBAL"}
+                        </td>
+                        <td className="px-6 py-3.5 border-r border-white/[0.04]">
+                          <div className="flex flex-wrap gap-1">
+                            {(p.subjectsTaught || []).map((sCodeRaw: string, i: number) => {
+                               const parsedCode = sCodeRaw.includes(" ") ? sCodeRaw.split(" ")[0] : sCodeRaw;
+                               // Only display if this subject is actually one of MY subjects, optional, 
+                               // but let's just show what they teach for now as requested or rather what they teach to ME.
+                               const sub = allSubjects.find((s:any) => s.code === parsedCode || s.alias === parsedCode);
+                               // Let's filter to only show subjects they teach that are in mySubjects
+                               if (!mySubjects.find((mySub: any) => (mySub.code === parsedCode || mySub.alias === parsedCode) && (mySub.facultyId === p.uid || mySub.facultyId === p.id))) {
+                                  return null; 
+                               }
+                               
+                               return (
+                                 <button 
+                                   key={i} 
+                                   onClick={() => setPopupSubject({ code: parsedCode, name: sub?.name || sCodeRaw })}
+                                   className="text-[9px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400 hover:bg-white/10 hover:text-white transition-colors cursor-pointer max-w-[80px] truncate"
+                                   title="Click for details"
+                                 >
+                                   {parsedCode}
+                                 </button>
+                               );
+                            })}
+                            {(p.subjectsTaught || []).length === 0 && <span className="text-[10px] text-gray-700 italic">None</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1151,12 +1223,12 @@ export default function CommunityPage() {
                  <div className="flex items-center gap-3 mb-2">
                    <div className="w-10 h-10 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center"><BookOpen className="w-5 h-5"/></div>
                    <div>
-                     <h3 className="text-xl font-black text-white">{popupSubject.code}</h3>
+                     <h3 className="text-xl font-black text-white break-all">{popupSubject.code}</h3>
                      <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Subject Reference</p>
                    </div>
                  </div>
-                 <div className="mt-4 p-4 bg-white/[0.03] border border-white/[0.05] rounded-xl text-center">
-                   <p className="text-sm font-medium text-gray-200">{popupSubject.name}</p>
+                 <div className="mt-4 p-4 bg-white/[0.03] border border-white/[0.05] rounded-xl text-center overflow-hidden">
+                   <p className="text-sm font-medium text-gray-200 break-words whitespace-normal">{popupSubject.name}</p>
                  </div>
                </motion.div>
             </div>

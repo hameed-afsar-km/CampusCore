@@ -87,13 +87,17 @@ export default function TimetablePage() {
     );
 
     return allSubjects.filter(s => {
-      // Include if linked to a matching class
+      // For students, ONLY include if strictly linked to their matching class
+      if (isStudent) {
+        return s.classId && matchingClassIds.has(s.classId);
+      }
+      
+      // Admins/Faculty see class-linked subjects PLUS generic department ones
       if (s.classId && matchingClassIds.has(s.classId)) return true;
-      // Include if department matches and no section filter (GLOBAL or matching section)
       if (s.department === viewDept && (!s.section || s.section === "GLOBAL" || s.section === viewSection)) return true;
       return false;
     });
-  }, [allSubjects, viewDept, viewSection, activeClassDocs]);
+  }, [allSubjects, viewDept, viewSection, activeClassDocs, isStudent]);
 
   const timetableData = useMemo(() => {
     if (viewMode === "class") {
