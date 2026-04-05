@@ -6,7 +6,7 @@ import {
   Users, GraduationCap, ShieldCheck, UserCircle, ArrowLeft, 
   Search, Mail, Building2, LayoutGrid, ChevronRight, 
   Filter, Download, MoreHorizontal, Hash, Upload, X, Check,
-  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert, Key, RotateCcw, Plus, Users2, Settings, QrCode, Tag
+  UserPlus, BookOpen, UserCheck, Trash2, ShieldAlert, Key, RotateCcw, Plus, Users2, Settings, QrCode, Tag, Edit2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useFirestore } from "@/lib/use-firestore";
@@ -19,11 +19,15 @@ type CategoryId = "admin" | "professor" | "student" | "subjects";
 export default function CommunityPage() {
   const { userData, adminCreateUser, adminResetPassword } = useAuth();
   const { data: users, loading, update, remove } = useFirestore<any>("users", false);
-  const { data: allSubjects, add: addSubject, remove: removeSubject } = useFirestore<any>("subjects", false);
+  const { data: allSubjects, add: addSubject, remove: removeSubject, update: updateSubject } = useFirestore<any>("subjects", false);
   const { data: activeClassDocs } = useFirestore<any>("classes", false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const [editSubject, setEditSubject] = useState<any>(null);
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [isAddingNewSubject, setIsAddingNewSubject] = useState(false);
 
   const professors = useMemo(() => users.filter((u: any) => u.role === "professor"), [users]);
 
@@ -45,7 +49,11 @@ export default function CommunityPage() {
     deptCol: "3",
     sectionCol: "4",
     advisorCol: "5",
-    subjectsCol: "6"
+    subjectsCol: "6",
+    codeCol: "1",
+    creditsCol: "3",
+    typeCol: "4",
+    facultiesCol: "6"
   });
   const [isImporting, setIsImporting] = useState(false);
   const [validationReport, setValidationReport] = useState<{ missingSubjects: string[], invalidAdvisors: string[] } | null>(null);
@@ -60,6 +68,11 @@ export default function CommunityPage() {
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectName, setNewSubjectName] = useState("");
 
+  // Filters & Sorting
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [deptFilter, setDeptFilter] = useState("all");
+  const [sectionFilter, setSectionFilter] = useState("all");
+
   const stats = useMemo(() => {
     return {
       admin: users.filter(u => u.role === "admin").length,
@@ -70,13 +83,18 @@ export default function CommunityPage() {
 
   const filteredUsers = useMemo(() => {
     if (!selectedCategory) return [];
-    return users.filter(u => 
-      u.role === selectedCategory && 
-      (u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-       u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       (u.department || "").toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [users, selectedCategory, searchQuery]);
+    return users.filter(u => {
+      const matchRole = u.role === selectedCategory;
+      const matchSearch = (u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (u.department || "").toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchStatus = statusFilter === "all" || u.status === statusFilter;
+      const matchDept = deptFilter === "all" || u.department === deptFilter;
+      const matchSection = sectionFilter === "all" || u.section === sectionFilter;
+
+      return matchRole && matchSearch && matchStatus && matchDept && matchSection;
+    });
+  }, [users, selectedCategory, searchQuery, statusFilter, deptFilter, sectionFilter]);
 
   const categories = useMemo(() => {
     const all = [
@@ -176,6 +194,28 @@ export default function CommunityPage() {
             const matchedProf = professors.find((p: any) => p.displayName?.toLowerCase() === advisorName.toLowerCase());
             profileData.advisorId = matchedProf?.uid || "";
             profileData.advisorName = matchedProf?.displayName || advisorName;
+          }
+
+          if (selectedCategory === "subjects") {
+            const code = row[parseInt(importMapping.codeCol) - 1]?.toString().trim();
+            const name = row[parseInt(importMapping.nameCol) - 1]?.toString().trim();
+            const credits = parseInt(row[parseInt(importMapping.creditsCol) - 1]?.toString()) || 3;
+            const type = row[parseInt(importMapping.typeCol) - 1]?.toString().trim() || "Theory";
+            const dept = normalizeDept(row[parseInt(importMapping.deptCol) - 1]?.toString().trim());
+            const facultyStr = row[parseInt(importMapping.facultiesCol) - 1]?.toString() || "";
+            
+            if (!code || !name) continue;
+
+            await addSubject({
+              code,
+              name,
+              credits,
+              subjectType: type,
+              department: dept,
+              facultyNamesCSV: facultyStr // Store for reference if needed
+            });
+            successful.push(code);
+            continue;
           }
 
           await adminCreateUser(email, "Password123!", name, profileData);
@@ -281,25 +321,52 @@ export default function CommunityPage() {
             </div>
             {userData?.role === 'admin' && (
               <div className="flex items-center gap-2">
+                {selectedCategory === "student" && (
+                  <div className="flex items-center gap-2 mr-2">
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-[#050505] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[10px] uppercase font-bold text-gray-400 outline-none">
+                      <option value="all">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="dropped">Dropped</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                    <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} className="bg-[#050505] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[10px] uppercase font-bold text-gray-400 outline-none">
+                      <option value="all">All Depts</option>
+                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                )}
                 <button 
                   onClick={() => {
-                    setEditUser({
-                      displayName: "",
-                      email: "",
-                      role: selectedCategory,
-                      department: "",
-                      section: "",
-                      subjectsTaught: [],
-                      classAdvisorId: "",
-                      advisorId: "",
-                      advisorName: ""
-                    });
-                    setIsAddingNew(true);
-                    setShowManageModal(true);
+                    if (selectedCategory === "subjects") {
+                      setEditSubject({
+                        code: "",
+                        name: "",
+                        credits: 3,
+                        subjectType: "Theory",
+                        department: ""
+                      });
+                      setIsAddingNewSubject(true);
+                      setShowSubjectModal(true);
+                    } else {
+                      setEditUser({
+                        displayName: "",
+                        email: "",
+                        role: selectedCategory,
+                        department: "",
+                        section: "",
+                        subjectsTaught: [],
+                        classAdvisorId: "",
+                        advisorId: "",
+                        advisorName: ""
+                      });
+                      setIsAddingNew(true);
+                      setShowManageModal(true);
+                    }
                   }}
                   className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-black rounded-xl hover:bg-cyan-400 transition-all text-xs font-bold uppercase tracking-widest"
                 >
-                  <UserPlus className="w-4 h-4" /> Add Member
+                  {selectedCategory === "subjects" ? <BookOpen className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />} 
+                  {selectedCategory === "subjects" ? "Add Subject" : "Add Member"}
                 </button>
                 <button 
                   onClick={() => { setIsAddingNew(false); setShowImportModal(true); }}
@@ -325,25 +392,51 @@ export default function CommunityPage() {
                     <th className="px-6 py-4 border-r border-white/[0.04]">Name</th>
                     <th className="px-6 py-4 border-r border-white/[0.04] text-center">Credits</th>
                     <th className="px-6 py-4 border-r border-white/[0.04]">Type / Dept</th>
+                    <th className="px-6 py-4 border-r border-white/[0.04]">Faculties</th>
                     <th className="px-6 py-4 border-white/[0.04] text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
-                  {allSubjects.map((s: any) => (
+                  {allSubjects.map((s: any) => {
+                    const subjectFaculties = professors.filter((p: any) => p.subjectsTaught?.includes(s.code));
+                    return (
                     <tr key={s.id} className="hover:bg-amber-500/[0.02] transition-colors">
                       <td className="px-6 py-3.5 border-r border-white/[0.04] font-bold text-cyan-400">{s.code}</td>
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-sm text-gray-200">{s.name}</td>
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-center text-sm font-bold text-gray-400">{s.credits}</td>
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-xs font-medium text-gray-500">{s.subjectType} / {s.department || "GLOBAL"}</td>
+                      <td className="px-6 py-3.5 border-r border-white/[0.04]">
+                        <div className="flex flex-wrap gap-1">
+                          {subjectFaculties.length > 0 ? (
+                            <>
+                              {subjectFaculties.slice(0, 2).map((p: any) => (
+                                <span key={p.uid} className="text-[10px] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-gray-400">
+                                  {p.displayName}
+                                </span>
+                              ))}
+                              {subjectFaculties.length > 2 && <span className="text-[10px] text-gray-600">+{subjectFaculties.length - 2} more</span>}
+                            </>
+                          ) : s.facultyNamesCSV ? (
+                            <span className="text-[10px] text-gray-500 italic max-w-[150px] truncate" title={s.facultyNamesCSV}>{s.facultyNamesCSV}</span>
+                          ) : (
+                            <span className="text-[10px] text-gray-700 italic">None Assigned</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-3.5 border-white/[0.04] text-right">
-                          <button onClick={() => { if(confirm('Are you sure you want to delete this subject?')) { removeSubject(s.id); } }} className="p-1.5 text-gray-500 hover:text-red-400">
-                            <Trash2 className="w-4 h-4"/>
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => { setEditSubject(s); setIsAddingNewSubject(false); setShowSubjectModal(true); }} className="p-1.5 text-gray-500 hover:text-cyan-400">
+                              <Edit2 className="w-4 h-4"/>
+                            </button>
+                            <button onClick={() => { if(confirm('Are you sure you want to delete this subject?')) { removeSubject(s.id); } }} className="p-1.5 text-gray-500 hover:text-red-400">
+                              <Trash2 className="w-4 h-4"/>
+                            </button>
+                          </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                   {allSubjects.length === 0 && (
-                    <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-xs">No subjects found in the curriculum.</td></tr>
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500 text-xs">No subjects found in the curriculum.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -359,7 +452,7 @@ export default function CommunityPage() {
                   <th className="px-6 py-4 w-[20%] border-r border-white/[0.04]">Full Legal Name</th>
                   <th className="px-6 py-4 w-[20%] border-r border-white/[0.04]">Institutional Email</th>
                   <th className="px-6 py-4 w-[10%] border-r border-white/[0.04]">Dept</th>
-                  {selectedCategory === "student" && <th className="px-6 py-4 border-r border-white/[0.04] text-center">Sec</th>}
+                   {selectedCategory === "student" && <th className="px-6 py-4 border-r border-white/[0.04] text-center">Sec</th>}
                   {selectedCategory === "professor" ? (
                     <>
                       <th className="px-6 py-4 w-[15%] border-r border-white/[0.04]">Advisor Of</th>
@@ -370,7 +463,7 @@ export default function CommunityPage() {
                   ) : null}
                   {userData?.role === 'admin' && (
                     <>
-                      <th className="px-6 py-4 w-[10%] border-r border-white/[0.04] text-center">Lifecycle</th>
+                      <th className="px-6 py-4 w-[10%] border-r border-white/[0.04] text-center">{selectedCategory === 'student' ? 'Status' : 'Lifecycle'}</th>
                       <th className="px-6 py-4 w-[10%] text-center">Manage</th>
                     </>
                   )}
@@ -401,7 +494,7 @@ export default function CommunityPage() {
                       </td>
                       <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
                         <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">
-                          {u.role === 'admin' ? "GLOBAL" : (u.department || "GLOBAL")}
+                          {u.role === 'admin' ? (u.adminRole || "GLOBAL") : (u.department || "GLOBAL")}
                         </span>
                       </td>
                       {selectedCategory === "student" && (
@@ -456,7 +549,17 @@ export default function CommunityPage() {
                         <>
                           <td className="px-6 py-3.5 border-r border-white/[0.04] text-center">
                             <div className="flex justify-center">
-                              <div className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black uppercase text-emerald-400 tracking-widest">Active</div>
+                              {selectedCategory === 'student' ? (
+                                <div className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${
+                                  (u.status || 'active') === 'active' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
+                                  u.status === 'dropped' ? 'bg-red-500/10 border border-red-500/20 text-red-400' :
+                                  'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                                }`}>
+                                  {u.status || 'active'}
+                                </div>
+                              ) : (
+                                <div className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black uppercase text-emerald-400 tracking-widest">Active</div>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-3.5 text-center">
@@ -550,44 +653,65 @@ export default function CommunityPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 pb-2 pt-2">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Name Column #</label>
-                      <input type="number" value={importMapping.nameCol} onChange={e => setImportMapping({...importMapping, nameCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Email Column #</label>
-                      <input type="number" value={importMapping.emailCol} onChange={e => setImportMapping({...importMapping, emailCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Dept. Column #</label>
-                      <input type="number" value={importMapping.deptCol} onChange={e => setImportMapping({...importMapping, deptCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
-                    </div>
-                    {selectedCategory !== 'admin' && (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Section Column #</label>
-                        <input type="number" value={importMapping.sectionCol} onChange={e => setImportMapping({...importMapping, sectionCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
-                      </div>
-                    )}
-                    {selectedCategory === 'professor' && (
+                    {selectedCategory === 'subjects' ? (
                       <>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Advisor Of (ClassID) #</label>
-                          <input type="number" value={importMapping.advisorCol} onChange={e => setImportMapping({...importMapping, advisorCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Code Column #</label>
+                          <input type="number" value={importMapping.codeCol} onChange={e => setImportMapping({...importMapping, codeCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Subjects (Comma separated) #</label>
-                          <input type="number" value={importMapping.subjectsCol} onChange={e => setImportMapping({...importMapping, subjectsCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Credits Column #</label>
+                          <input type="number" value={importMapping.creditsCol} onChange={e => setImportMapping({...importMapping, creditsCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Type Column #</label>
+                          <input type="number" value={importMapping.typeCol} onChange={e => setImportMapping({...importMapping, typeCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Faculties Col #</label>
+                          <input type="number" value={importMapping.facultiesCol} onChange={e => setImportMapping({...importMapping, facultiesCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
                         </div>
                       </>
+                    ) : (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Name Column #</label>
+                          <input type="number" value={importMapping.nameCol} onChange={e => setImportMapping({...importMapping, nameCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Email Column #</label>
+                          <input type="number" value={importMapping.emailCol} onChange={e => setImportMapping({...importMapping, emailCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Dept. Column #</label>
+                          <input type="number" value={importMapping.deptCol} onChange={e => setImportMapping({...importMapping, deptCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                        </div>
+                        {selectedCategory !== 'admin' && (
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Section Column #</label>
+                            <input type="number" value={importMapping.sectionCol} onChange={e => setImportMapping({...importMapping, sectionCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                          </div>
+                        )}
+                        {selectedCategory === 'professor' && (
+                          <>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Advisor Of (ClassID) #</label>
+                              <input type="number" value={importMapping.advisorCol} onChange={e => setImportMapping({...importMapping, advisorCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Subjects (Comma separated) #</label>
+                              <input type="number" value={importMapping.subjectsCol} onChange={e => setImportMapping({...importMapping, subjectsCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                            </div>
+                          </>
+                        )}
+                        {selectedCategory === 'student' && (
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Advisor Name Column #</label>
+                            <input type="number" value={importMapping.advisorCol} onChange={e => setImportMapping({...importMapping, advisorCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
+                          </div>
+                        )}
+                      </>
                     )}
-                    {selectedCategory === 'student' && (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest pl-1">Advisor Name Column #</label>
-                        <input type="number" value={importMapping.advisorCol} onChange={e => setImportMapping({...importMapping, advisorCol: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-2.5 text-gray-100 outline-none focus:border-white/20 text-sm" />
-                      </div>
-                    )}
-                  </div>
 
                   {validationReport && (
                     <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-3">
@@ -666,18 +790,35 @@ export default function CommunityPage() {
                       <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Institutional Email</label>
                       <input type="email" value={editUser.email} onChange={e => setEditUser({...editUser, email: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50" placeholder="user@campus.edu" />
                    </div>
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Department</label>
-                        <select 
-                          value={editUser.department || ""} 
-                          onChange={e => setEditUser({...editUser, department: e.target.value})}
-                          className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
-                        >
-                          <option value="">Select Dept</option>
-                          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      {editUser.role === 'admin' ? (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Admin Role</label>
+                          <select 
+                            value={editUser.adminRole || ""} 
+                            onChange={e => setEditUser({...editUser, adminRole: e.target.value})}
+                            className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
+                          >
+                            <option value="Super Admin">Super Admin</option>
+                            <option value="Library">Library</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Hostel">Hostel</option>
+                            <option value="Exam Cell">Exam Cell</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                           <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Department</label>
+                           <select 
+                             value={editUser.department || ""} 
+                             onChange={e => setEditUser({...editUser, department: e.target.value})}
+                             className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
+                           >
+                             <option value="">Select Dept</option>
+                             {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                           </select>
+                        </div>
+                      )}
                       {editUser.role === 'student' && (
                         <div className="space-y-1.5">
                           <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Section</label>
@@ -691,7 +832,21 @@ export default function CommunityPage() {
                           </select>
                         </div>
                       )}
-                   </div>
+                    </div>
+                    {editUser.role === 'student' && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Enrollment Status</label>
+                          <select 
+                            value={editUser.status || "active"} 
+                            onChange={e => setEditUser({...editUser, status: e.target.value})}
+                            className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white font-black uppercase tracking-widest text-[10px]"
+                          >
+                            <option value="active">Active</option>
+                            <option value="dropped">Dropped</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                        </div>
+                    )}
                    {editUser.role === 'professor' && (
                       <>
                         <div className="space-y-4 py-4 border-y border-white/[0.05] my-4">
@@ -808,13 +963,14 @@ export default function CommunityPage() {
                                        </div>
                                      );
                                   }
+                                  return null;
                                 })()}
                               </div>
                             )}
                           </div>
                         </div>
-                     </>
-                   )}
+                      </>
+                    )}
                    {editUser.role === 'student' && (
                       <div className="space-y-1.5">
                         <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Assign Class Advisor (Faculty)</label>
@@ -913,6 +1069,85 @@ export default function CommunityPage() {
                           </button>
                         </>
                       )}
+                   </div>
+                </div>
+               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Manage Subject Modal */}
+        <AnimatePresence>
+          {showSubjectModal && editSubject && (
+            <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md bg-[#0a0a0a] border border-white/[0.1] rounded-[2rem] p-8 shadow-2xl relative"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-cyan-400" />
+                    {isAddingNewSubject ? "Add New Subject" : "Edit Subject"}
+                  </h3>
+                  <button onClick={() => { setShowSubjectModal(false); setIsAddingNewSubject(false); }} className="text-gray-500 hover:text-white"><X className="w-5 h-5"/></button>
+                </div>
+
+                <div className="space-y-4">
+                   <div className="space-y-1.5">
+                      <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Subject Code</label>
+                      <input type="text" value={editSubject.code} onChange={e => setEditSubject({...editSubject, code: e.target.value.toUpperCase()})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50" placeholder="e.g. CSD101" disabled={!isAddingNewSubject} />
+                   </div>
+                   <div className="space-y-1.5">
+                      <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Subject Name</label>
+                      <input type="text" value={editSubject.name} onChange={e => setEditSubject({...editSubject, name: e.target.value})} className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50" placeholder="e.g. Data Structures" />
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Credits</label>
+                        <input type="number" min={1} max={10} value={editSubject.credits} onChange={e => setEditSubject({...editSubject, credits: parseInt(e.target.value) || 0})} className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Type</label>
+                        <select 
+                          value={editSubject.subjectType || "Theory"} 
+                          onChange={e => setEditSubject({...editSubject, subjectType: e.target.value})}
+                          className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
+                        >
+                          <option value="Theory">Theory</option>
+                          <option value="Lab">Lab</option>
+                          <option value="LIT">Integrated</option>
+                        </select>
+                      </div>
+                   </div>
+                   <div className="space-y-1.5">
+                      <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest pl-1">Department</label>
+                      <select 
+                        value={editSubject.department || ""} 
+                        onChange={e => setEditSubject({...editSubject, department: e.target.value})}
+                        className="w-full bg-[#050505] border border-white/[0.08] rounded-xl p-3 text-white outline-none focus:border-cyan-500/50 [&>option]:bg-[#050505] [&>option]:text-white"
+                      >
+                        <option value="GLOBAL">GLOBAL / General</option>
+                        {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                   </div>
+                   
+                   <div className="pt-4 flex flex-col gap-3">
+                      <button 
+                        onClick={async () => {
+                          if (isAddingNewSubject) {
+                            await addSubject({ ...editSubject, department: editSubject.department || "GLOBAL" });
+                          } else {
+                            await updateSubject(editSubject.id, editSubject);
+                          }
+                          setShowSubjectModal(false);
+                          setIsAddingNewSubject(false);
+                        }}
+                        className="w-full bg-cyan-500 text-black font-bold py-3 rounded-xl hover:bg-cyan-400 transition-all flex items-center justify-center gap-2"
+                      >
+                         <Check className="w-4 h-4" /> {isAddingNewSubject ? "Confirm Subject" : "Save Changes"}
+                      </button>
                    </div>
                 </div>
               </motion.div>

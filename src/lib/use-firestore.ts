@@ -52,6 +52,8 @@ export function useFirestore<T extends { id?: string }>(
       );
     }
 
+    let unsubscribe: () => void;
+    
     const startListener = (currentQuery: any, isFallback: boolean = false) => {
       return onSnapshot(
         currentQuery,
@@ -72,6 +74,7 @@ export function useFirestore<T extends { id?: string }>(
               where("userId", "==", user.uid),
               orderBy("createdAt", "desc")
             );
+            if (unsubscribe) unsubscribe();
             unsubscribe = startListener(fallbackQuery, true);
           } else {
             console.error(`Firestore [${collectionName}] fatal error:`, err);
@@ -82,9 +85,11 @@ export function useFirestore<T extends { id?: string }>(
       );
     };
 
-    let unsubscribe = startListener(q);
-    return () => unsubscribe();
-  }, [collectionName, user?.uid, userSpecific]);
+    unsubscribe = startListener(q);
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [collectionName, user?.uid, userData?.role, userSpecific]);
 
   const add = async (item: Omit<T, "id">) => {
     if (userSpecific && !user) throw new Error("User must be logged in to add data.");
